@@ -88,7 +88,7 @@ const WEBGL_CONFIGS = {
 class FingerprintGenerator {
   generate(options = {}) {
     const os = options.forceOS || this.selectOS();
-    const navigator = this.generateNavigator(os);
+    const navigator = this.generateNavigator(os, options.chromeVersion);
     const screen = this.generateScreen(os);
     const hardware = this.generateHardware();
     const webgl = this.generateWebGL(os);
@@ -127,8 +127,8 @@ class FingerprintGenerator {
     return 'Linux';
   }
 
-  generateNavigator(os) {
-    const chromeVersion = this.randomChoice(CHROME_VERSIONS);
+  generateNavigator(os, preferredChromeVersion) {
+    const chromeVersion = preferredChromeVersion || this.randomChoice(CHROME_VERSIONS);
     const userAgent = this.generateUserAgent(os, chromeVersion);
     const platform = this.getPlatform(os);
 
