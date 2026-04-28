@@ -1,0 +1,53 @@
+{
+  "name": "all2api-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:web\" \"npm:dev:electron\"",
+    "dev:web": "vite",
+    "dev:electron": "node scripts/dev-electron.cjs",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:desktop": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "pinia": "^2.3.1",
+    "playwright": "^1.59.1",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.12",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "vite": "^5.4.12",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.all2api.desktop",
+    "productName": "All2API",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
