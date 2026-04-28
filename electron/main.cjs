@@ -121,14 +121,23 @@ function randomString(len = 8) {
   return seed.slice(0, len);
 }
 
+function generateRandomFullName() {
+  const firstNames = ['Alex', 'Mason', 'Ryan', 'Daniel', 'Evan', 'Noah', 'Liam', 'Owen', 'Lucas', 'Ethan', 'Emma', 'Sophia', 'Mia', 'Ava', 'Chloe'];
+  const lastNames = ['Chen', 'Lee', 'Smith', 'Wu', 'Taylor', 'Wang', 'Lin', 'Zhang', 'Brown', 'Wilson', 'Liu', 'Yang', 'Clark', 'Hall', 'Young'];
+  const first = firstNames[Math.floor(Math.random() * firstNames.length)];
+  const last = lastNames[Math.floor(Math.random() * lastNames.length)];
+  return `${first} ${last}`;
+}
+
 function generateDefaultPassword() {
   const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const lower = 'abcdefghijkmnopqrstuvwxyz';
   const digits = '23456789';
-  const all = `${upper}${lower}${digits}`;
+  const symbols = '!@#$%^&*';
+  const all = `${upper}${lower}${digits}${symbols}`;
   const pick = (chars) => chars[Math.floor(Math.random() * chars.length)];
-  const rest = Array.from({ length: 9 }, () => pick(all));
-  return [pick(upper), pick(lower), pick(digits), ...rest].sort(() => Math.random() - 0.5).join('');
+  const rest = Array.from({ length: 10 }, () => pick(all));
+  return [pick(upper), pick(lower), pick(digits), pick(symbols), ...rest].sort(() => Math.random() - 0.5).join('');
 }
 
 function createWindow() {
@@ -184,7 +193,12 @@ async function sendPagePreview(page, label, extra = {}) {
   } catch (_error) {}
 }
 
-function buildFingerprintProfile(type) {
+function normalizeChromeVersion(version) {
+  const match = String(version || '').match(/(\d+\.\d+\.\d+\.\d+)/);
+  return match ? match[1] : '';
+}
+
+function buildFingerprintProfile(type, browserVersion = '') {
   if (!type || type === 'none') return null;
 
   const forceOSMap = {
@@ -194,7 +208,10 @@ function buildFingerprintProfile(type) {
   };
 
   const forceOS = type === 'random' ? undefined : forceOSMap[type];
-  const profile = fingerprintGenerator.generate({ forceOS });
+  const profile = fingerprintGenerator.generate({
+    forceOS,
+    chromeVersion: normalizeChromeVersion(browserVersion)
+  });
   const checked = fingerprintValidator.validate(profile);
   if (!checked.valid) {
     return fingerprintValidator.autoFixInconsistencies(profile);
@@ -222,8 +239,7 @@ function buildAccount(baseConfig, idx, mailboxResult) {
   const username = `${baseConfig.usernamePrefix}${suffix}`;
   const email = mailboxResult?.email || `${username}@${baseConfig.emailDomain}`;
   const password = mailboxResult?.password || baseConfig.password || generateDefaultPassword();
-  const fallbackNames = ['Alex Chen', 'Mason Lee', 'Ryan Smith', 'Daniel Wu', 'Evan Taylor'];
-  const fullName = String(baseConfig.fullName || fallbackNames[idx % fallbackNames.length]).trim();
+  const fullName = String(baseConfig.fullName || generateRandomFullName()).trim();
   const birthYear = String(baseConfig.birthYear || 1998);
   const birthMonth = String(baseConfig.birthMonth || 1);
   const birthDay = String(baseConfig.birthDay || 1);
@@ -273,6 +289,24 @@ async function clickFirstVisible(page, selectors, logs, label, entry, timeout = 
   return found.selector;
 }
 
+async function findEditableNow(page, selectors) {
+  for (const selector of selectors) {
+    try {
+      const locator = page.locator(selector);
+      const count = Math.min(await locator.count(), 4);
+      for (let i = 0; i < count; i += 1) {
+        const item = locator.nth(i);
+        const visible = await item.isVisible({ timeout: 250 }).catch(() => false);
+        const editable = await item.isEditable({ timeout: 250 }).catch(() => false);
+        if (visible && editable) {
+          return { selector: count > 1 ? `${selector} [${i + 1}]` : selector, locator: item };
+        }
+      }
+    } catch (_error) {}
+  }
+  return null;
+}
+
 async function fillFirstAvailableLabel(page, labels, value) {
   for (const label of labels) {
     try {
@@ -284,6 +318,545 @@ async function fillFirstAvailableLabel(page, labels, value) {
     } catch (_error) {}
   }
   return '';
+}
+
+async function isLikelyBlankPage(page) {
+  try {
+    const snapshot = await page.evaluate(() => {
+      const text = document.body?.innerText?.trim() || '';
+      return {
+        textLength: text.length,
+        inputCount: document.querySelectorAll('input, textarea, select').length,
+        buttonCount: document.querySelectorAll('button, a, [role="button"], [role="link"]').length
+      };
+    });
+    return snapshot.textLength < 20 && snapshot.inputCount === 0 && snapshot.buttonCount === 0;
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function fillNameOrUsername(page, selectors, value, logs, entry, timeout = 90000) {
+  const labels = [/Full name/i, /Name/i, /姓名/, /用户名/, /名字/, /全名/, /名称/];
+  const startedAt = Date.now();
+  let lastNoticeAt = 0;
+  let reloadedBlankPage = false;
+
+  while (Date.now() - startedAt < timeout) {
+    const passwordPage = await waitForAnyVisible(page, ['input[placeholder="Enter password"]'], 1200);
+    if (passwordPage) {
+      logLine(logs, `[${entry.index}] 页面进入已有账号登录分支，当前流程按注册账号设计，停止继续`, { stage: 'login-branch', index: entry.index });
+      throw new Error('当前邮箱已进入登录分支，请更换邮箱后重试');
+    }
+
+    const labelSelector = await fillFirstAvailableLabel(page, labels, value);
+    if (labelSelector) {
+      logLine(logs, `[${entry.index}] 已按标签填写姓名/用户名: ${labelSelector}`, { stage: '姓名/用户名', index: entry.index });
+      return labelSelector;
+    }
+
+    const found = await waitForAnyVisible(page, selectors, 4000);
+    if (found) {
+      await found.locator.click({ timeout: 5000 }).catch(() => {});
+      await found.locator.fill(value, { timeout: 10000 });
+      logLine(logs, `[${entry.index}] 已填写姓名/用户名: ${found.selector}`, { stage: '姓名/用户名', index: entry.index });
+      return found.selector;
+    }
+
+    const elapsed = Date.now() - startedAt;
+    if (elapsed - lastNoticeAt > 12000) {
+      lastNoticeAt = elapsed;
+      logLine(logs, `[${entry.index}] 仍在等待姓名/用户名输入框出现，页面可能还在加载或白屏`, { stage: 'name-wait', index: entry.index });
+      await sendPagePreview(page, '等待姓名/用户名输入框出现', { stage: 'name-wait', index: entry.index });
+    }
+
+    if (!reloadedBlankPage && elapsed > 25000 && await isLikelyBlankPage(page)) {
+      reloadedBlankPage = true;
+      logLine(logs, `[${entry.index}] 检测到页面疑似白屏，尝试刷新当前页后继续等待`, { stage: 'blank-reload', index: entry.index });
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+      await page.waitForTimeout(3000);
+    } else {
+      await page.waitForTimeout(1500);
+    }
+  }
+
+  throw new Error('等待姓名/用户名输入框超时，请检查页面是否白屏、网络是否卡住，或手动填写用户名/姓名输入框选择器');
+}
+
+async function readVisiblePageErrors(page) {
+  try {
+    const messages = await page.evaluate(() => {
+      const errorSelector = [
+        '[role="alert"]',
+        '[aria-live="assertive"]',
+        '[aria-live="polite"]',
+        '[aria-invalid="true"]',
+        '[class*="error" i]',
+        '[class*="invalid" i]',
+        '[data-testid*="error" i]',
+        '[id*="error" i]'
+      ].join(',');
+      const nodes = Array.from(document.querySelectorAll(errorSelector));
+      const visibleText = (node) => {
+        const rect = node.getBoundingClientRect();
+        const style = window.getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || rect.width === 0 || rect.height === 0) return '';
+        const text = node.innerText || node.getAttribute('aria-label') || node.getAttribute('validationMessage') || '';
+        return text.replace(/\s+/g, ' ').trim();
+      };
+      return nodes
+        .map(visibleText)
+        .filter((text) => text.length >= 2 && text.length <= 240);
+    });
+    return [...new Set(messages)].slice(0, 3);
+  } catch (_error) {
+    return [];
+  }
+}
+
+async function waitForEditable(page, selectors, timeout = 30000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeout) {
+    for (const selector of selectors) {
+      try {
+        const locator = page.locator(selector);
+        const count = Math.min(await locator.count(), 5);
+        for (let i = 0; i < count; i += 1) {
+          const item = locator.nth(i);
+          if (await item.isVisible({ timeout: 500 }) && await item.isEditable({ timeout: 500 })) {
+            return { selector: count > 1 ? `${selector} [${i + 1}]` : selector, locator: item };
+          }
+        }
+      } catch (_error) {}
+    }
+    await page.waitForTimeout(800);
+  }
+  return null;
+}
+
+async function fillEditable(locator, value) {
+  await locator.click({ timeout: 5000 }).catch(() => {});
+  await locator.fill('', { timeout: 5000 }).catch(() => {});
+  try {
+    await locator.fill(value, { timeout: 10000 });
+  } catch (_error) {
+    try {
+      await locator.pressSequentially(value, { delay: 35, timeout: 15000 });
+    } catch (__error) {
+      await setNativeInputValue(locator, value);
+    }
+  }
+}
+
+async function setNativeInputValue(locator, value) {
+  await locator.evaluate((node, nextValue) => {
+    const input = node;
+    const proto = window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    if (setter) {
+      setter.call(input, nextValue);
+    } else {
+      input.value = nextValue;
+    }
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: nextValue }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.dispatchEvent(new Event('blur', { bubbles: true }));
+  }, value);
+}
+
+async function getEditablePasswordFields(page) {
+  const fields = [];
+  const locator = page.locator('input[type="password"]');
+  const seen = new Set();
+  const count = Math.min(await locator.count().catch(() => 0), 8);
+
+  for (let i = 0; i < count; i += 1) {
+    const field = locator.nth(i);
+    const meta = await field.evaluate((node, index) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        index,
+        key: `${Math.round(rect.left)}:${Math.round(rect.top)}:${Math.round(rect.width)}:${Math.round(rect.height)}:${node.placeholder || ''}`,
+        top: rect.top,
+        left: rect.left
+      };
+    }, i).catch(() => null);
+    if (!meta || seen.has(meta.key)) continue;
+    seen.add(meta.key);
+
+    if (await field.isVisible({ timeout: 500 }).catch(() => false) && await field.isEditable({ timeout: 500 }).catch(() => false)) {
+      fields.push({ locator: field, top: meta.top, left: meta.left });
+    }
+  }
+
+  return fields
+    .sort((a, b) => a.top - b.top || a.left - b.left)
+    .map((item) => item.locator);
+}
+
+async function waitForEditablePasswordPair(page, timeout = 30000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeout) {
+    const fields = await getPasswordFieldsByLabel(page) || await getEditablePasswordFields(page);
+    if (fields.length >= 2) return fields.slice(0, 2);
+    await page.waitForTimeout(800);
+  }
+  return null;
+}
+
+async function getPasswordFieldsByLabel(page) {
+  const passwordField = page.getByLabel(/^Password$/i).first();
+  const confirmField = page.getByLabel(/^Confirm password$/i).first();
+  const passwordReady = await passwordField.isVisible({ timeout: 500 }).catch(() => false)
+    && await passwordField.isEditable({ timeout: 500 }).catch(() => false);
+  const confirmReady = await confirmField.isVisible({ timeout: 500 }).catch(() => false)
+    && await confirmField.isEditable({ timeout: 500 }).catch(() => false);
+  if (!passwordReady || !confirmReady) return null;
+
+  const sameNode = await passwordField.evaluate((node, confirm) => node === confirm, await confirmField.elementHandle()).catch(() => false);
+  return sameNode ? null : [passwordField, confirmField];
+}
+
+async function readInputValue(locator) {
+  return locator.inputValue({ timeout: 5000 }).catch(() => '');
+}
+
+async function fillPasswordFields(page, _passwordInputSelectors, _confirmPasswordSelectors, password, logs, entry) {
+  const fields = await waitForEditablePasswordPair(page, 30000);
+  if (!fields) {
+    const pageErrors = await readVisiblePageErrors(page);
+    throw new Error(pageErrors.length > 0 ? `密码输入框不可编辑: ${pageErrors.join(' | ')}` : '未找到两个可编辑的密码输入框');
+  }
+
+  await fillEditable(fields[0], password);
+  logLine(logs, `[${entry.index}] 已填写密码: 第 1 个密码框`, { stage: '密码', index: entry.index });
+  await fillEditable(fields[1], password);
+  logLine(logs, `[${entry.index}] 已填写确认密码: 第 2 个密码框`, { stage: '确认密码', index: entry.index });
+
+  let firstValue = await readInputValue(fields[0]);
+  let secondValue = await readInputValue(fields[1]);
+  if (firstValue !== password || secondValue !== password) {
+    logLine(logs, `[${entry.index}] 密码字段校验不一致，使用原生输入事件补写两个密码框`, { stage: '密码', index: entry.index });
+    await setNativeInputValue(fields[0], password);
+    await setNativeInputValue(fields[1], password);
+    firstValue = await readInputValue(fields[0]);
+    secondValue = await readInputValue(fields[1]);
+  }
+  if (firstValue !== password || secondValue !== password) {
+    throw new Error(`密码填写校验失败: 第 1 个密码框长度 ${firstValue.length}，第 2 个密码框长度 ${secondValue.length}`);
+  }
+}
+
+async function fillPasswordFieldsWithReloadRetry(page, passwordInputSelectors, confirmPasswordSelectors, password, logs, entry) {
+  try {
+    await fillPasswordFields(page, passwordInputSelectors, confirmPasswordSelectors, password, logs, entry);
+    return;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logLine(logs, `[${entry.index}] 填写密码失败，尝试刷新页面后重试: ${message}`, { stage: 'password-retry', index: entry.index });
+    await sendPagePreview(page, '填写密码失败，准备刷新重试', { stage: 'password-retry', index: entry.index });
+  }
+
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(3000);
+  await waitForPasswordPage(page, passwordInputSelectors, logs, entry);
+  await fillPasswordFields(page, passwordInputSelectors, confirmPasswordSelectors, password, logs, entry);
+}
+
+function birthdayMarkers() {
+  return [
+    'text=/生日|出生日期|出生年月|Birth date|Birthday|Date of birth/i',
+    'input[name*="birth" i]',
+    'input[id*="birth" i]',
+    'select[name*="birth" i]',
+    'select[id*="birth" i]'
+  ];
+}
+
+async function isLikelyVerificationCodePage(page) {
+  try {
+    return await page.evaluate(() => {
+      const text = document.body?.innerText || '';
+      const url = window.location.href;
+      return /verification|verify|code|验证码|验证/i.test(text) || /verification|verify|code/i.test(url);
+    });
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function waitForVerificationCodeInput(page, selectors, timeout = 2500) {
+  const found = await waitForAnyVisible(page, selectors, timeout);
+  if (!found) return null;
+  if (!await isLikelyVerificationCodePage(page)) return null;
+  return found;
+}
+
+async function detectRegistrationRequirements(page, selectors) {
+  const [emailField, nameField, codeField] = await Promise.all([
+    findEditableNow(page, selectors.emailInputSelectors),
+    findEditableNow(page, selectors.nameInputSelectors),
+    findEditableNow(page, selectors.codeInputSelectors)
+  ]);
+  const passwordFields = await getEditablePasswordFields(page);
+  const pageErrors = await readVisiblePageErrors(page);
+  const isVerifyPage = codeField ? await isLikelyVerificationCodePage(page) : false;
+
+  return {
+    emailField,
+    nameField,
+    codeField: isVerifyPage ? codeField : null,
+    passwordFields,
+    pageErrors
+  };
+}
+
+async function driveRegistrationByPageState(page, account, logs, entry, selectors, recentHttpErrors, options = {}) {
+  const timeout = Number(options.timeout || 70000);
+  const reloadMax = Math.max(0, Number(options.reloadMax ?? 3));
+  const startedAt = Date.now();
+  let lastNoticeAt = 0;
+  let reloadAttempts = 0;
+  let safetyCycles = 0;
+
+  while (Date.now() - startedAt < timeout) {
+    safetyCycles += 1;
+    if (safetyCycles > 14) break;
+
+    const state = await detectRegistrationRequirements(page, selectors);
+    const recentBadRequest = recentHttpErrors.find((item) => Date.now() - item.at < 30000);
+    if (state.pageErrors.length > 0 || recentBadRequest) {
+      const messages = [];
+      if (state.pageErrors.length > 0) messages.push(state.pageErrors.join(' | '));
+      if (recentBadRequest) messages.push(`HTTP ${recentBadRequest.status}: ${recentBadRequest.url}`);
+      const message = messages.join(' | ');
+      logLine(logs, `[${entry.index}] 主流程检测到页面报错: ${message}`, { stage: 'state-error', index: entry.index });
+      await sendPagePreview(page, '主流程页面报错', { stage: 'state-error', index: entry.index });
+
+      if (reloadAttempts < reloadMax) {
+        reloadAttempts += 1;
+        logLine(logs, `[${entry.index}] 主流程尝试刷新恢复 (${reloadAttempts}/${reloadMax})`, { stage: 'state-error-reload', index: entry.index });
+        recentHttpErrors.length = 0;
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+        await page.waitForTimeout(2500);
+        continue;
+      }
+      throw new Error(`主流程失败: 页面连续报错，刷新 ${reloadMax} 次仍未恢复: ${message}`);
+    }
+
+    if (state.codeField) {
+      logLine(logs, `[${entry.index}] 页面识别结果: 需要填写邮箱验证码`, { stage: 'state-code', index: entry.index });
+      return 'code';
+    }
+
+    if (state.passwordFields.length >= 2) {
+      logLine(logs, `[${entry.index}] 页面识别结果: 需要设置密码`, { stage: 'state-password', index: entry.index });
+      return 'password';
+    }
+
+    if (state.nameField) {
+      await fillEditable(state.nameField.locator, account.fullName);
+      logLine(logs, `[${entry.index}] 页面识别结果: 需要姓名，已填写 ${state.nameField.selector}`, { stage: 'state-name', index: entry.index });
+      await clickFirstVisible(page, selectors.firstContinueSelectors, logs, '主流程 Continue 按钮', entry, 12000);
+      await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(1200);
+      continue;
+    }
+
+    if (state.emailField) {
+      await fillEditable(state.emailField.locator, account.email);
+      logLine(logs, `[${entry.index}] 页面识别结果: 需要邮箱，已填写 ${state.emailField.selector}`, { stage: 'state-email', index: entry.index });
+      await clickFirstVisible(page, selectors.firstContinueSelectors, logs, '主流程 Continue 按钮', entry, 12000);
+      await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(1200);
+      continue;
+    }
+
+    const elapsed = Date.now() - startedAt;
+    if (elapsed - lastNoticeAt > 10000) {
+      lastNoticeAt = elapsed;
+      logLine(logs, `[${entry.index}] 主流程尚未识别出可填写字段，继续等待页面加载`, { stage: 'state-wait', index: entry.index });
+      await sendPagePreview(page, '主流程等待字段出现', { stage: 'state-wait', index: entry.index });
+    }
+
+    await page.waitForTimeout(1200);
+  }
+
+  throw new Error('主流程超时: 未识别出下一步所需字段（姓名/邮箱/验证码/密码）');
+}
+
+async function waitForVerificationCodePage(page, codeInputSelectors, account, logs, entry, continueSelectors, options = {}) {
+  const timeout = options.timeout || 60000;
+  const allowBirthday = options.allowBirthday !== false;
+  const recentHttpErrors = options.recentHttpErrors || [];
+  const reloadMax = Math.max(0, Number(options.reloadMax ?? 3));
+  const startedAt = Date.now();
+  let lastNoticeAt = 0;
+  let reloadAttempts = options.reloadAttempts || 0;
+
+  while (Date.now() - startedAt < timeout) {
+    if (allowBirthday && await waitForAnyVisible(page, birthdayMarkers(), 1500)) {
+      await handleOptionalBirthdayStep(page, account, logs, entry, continueSelectors);
+      return waitForVerificationCodePage(page, codeInputSelectors, account, logs, entry, continueSelectors, {
+        timeout,
+        allowBirthday: false,
+        recentHttpErrors,
+        reloadMax,
+        reloadAttempts
+      });
+    }
+
+    const pageErrors = await readVisiblePageErrors(page);
+    const recentBadRequest = recentHttpErrors.find((item) => Date.now() - item.at < 30000);
+    if (pageErrors.length > 0 || recentBadRequest) {
+      const messages = [];
+      if (pageErrors.length > 0) messages.push(pageErrors.join(' | '));
+      if (recentBadRequest) messages.push(`HTTP ${recentBadRequest.status}: ${recentBadRequest.url}`);
+      const message = messages.join(' | ');
+      logLine(logs, `[${entry.index}] 姓名/用户名提交后页面报错: ${message}`, { stage: 'name-error', index: entry.index });
+      await sendPagePreview(page, '姓名/用户名提交后页面报错', { stage: 'name-error', index: entry.index });
+
+      if (reloadAttempts < reloadMax) {
+        reloadAttempts += 1;
+        logLine(logs, `[${entry.index}] 尝试刷新页面恢复验证码步骤 (${reloadAttempts}/${reloadMax})`, { stage: 'name-error-reload', index: entry.index });
+        recentHttpErrors.length = 0;
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+        await page.waitForTimeout(3000);
+        continue;
+      }
+
+      throw new Error(`本次注册失败: 姓名/用户名提交后页面连续报错，刷新 ${reloadMax} 次仍未恢复: ${message}`);
+    }
+
+    const codeInput = await waitForVerificationCodeInput(page, codeInputSelectors, 2500);
+    if (codeInput) {
+      logLine(logs, `[${entry.index}] 已确认进入邮箱验证码页面: ${codeInput.selector}`, { stage: 'verify-code', index: entry.index });
+      return codeInput.selector;
+    }
+
+    const elapsed = Date.now() - startedAt;
+    if (elapsed - lastNoticeAt > 10000) {
+      lastNoticeAt = elapsed;
+      logLine(logs, `[${entry.index}] 已点击姓名/用户名 Continue，仍在确认是否进入验证码页面`, { stage: 'verify-wait', index: entry.index });
+      await sendPagePreview(page, '等待进入邮箱验证码页面', { stage: 'verify-wait', index: entry.index });
+    }
+    await page.waitForTimeout(1500);
+  }
+
+  await sendPagePreview(page, '未确认进入邮箱验证码页面', { stage: 'verify-timeout', index: entry.index });
+  if (reloadAttempts < reloadMax) {
+    reloadAttempts += 1;
+    logLine(logs, `[${entry.index}] 未确认进入验证码页面，尝试刷新页面恢复 (${reloadAttempts}/${reloadMax})`, { stage: 'verify-timeout-reload', index: entry.index });
+    recentHttpErrors.length = 0;
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(3000);
+    return waitForVerificationCodePage(page, codeInputSelectors, account, logs, entry, continueSelectors, {
+      timeout,
+      allowBirthday,
+      recentHttpErrors,
+      reloadMax,
+      reloadAttempts
+    });
+  }
+  throw new Error(`本次注册失败: 点击姓名/用户名 Continue 后，刷新 ${reloadMax} 次仍未确认进入邮箱验证码页面`);
+}
+
+async function waitForPasswordPage(page, passwordInputSelectors, logs, entry, timeout = 60000) {
+  const startedAt = Date.now();
+  let lastNoticeAt = 0;
+
+  while (Date.now() - startedAt < timeout) {
+    const passwordField = await waitForEditable(page, passwordInputSelectors, 2500);
+    if (passwordField) {
+      logLine(logs, `[${entry.index}] 已确认进入密码设置页面: ${passwordField.selector}`, { stage: 'password', index: entry.index });
+      return passwordField.selector;
+    }
+
+    const pageErrors = await readVisiblePageErrors(page);
+    if (pageErrors.length > 0) {
+      const message = pageErrors.join(' | ');
+      logLine(logs, `[${entry.index}] 验证码提交后页面报错: ${message}`, { stage: 'verify-error', index: entry.index });
+      await sendPagePreview(page, '验证码提交后页面报错', { stage: 'verify-error', index: entry.index });
+      throw new Error(`验证码提交后页面报错: ${message}`);
+    }
+
+    const elapsed = Date.now() - startedAt;
+    if (elapsed - lastNoticeAt > 10000) {
+      lastNoticeAt = elapsed;
+      logLine(logs, `[${entry.index}] 已提交验证码，仍在等待可编辑的密码输入框`, { stage: 'password-wait', index: entry.index });
+    }
+    await page.waitForTimeout(1200);
+  }
+
+  throw new Error('提交验证码后，未等到可编辑的密码输入框');
+}
+
+async function waitAfterPasswordSubmit(page, passwordInputSelectors, authConfirmSelectors, allowAccessSelectors, recentHttpErrors, logs, entry, timeout = 45000, reloadAttempts = 0, reloadMax = 3) {
+  reloadMax = Math.max(0, Number(reloadMax ?? 3));
+  const startedAt = Date.now();
+  let lastNoticeAt = 0;
+
+  while (Date.now() - startedAt < timeout) {
+    const authButton = await waitForAnyVisible(page, authConfirmSelectors, 1500);
+    if (authButton) return 'auth';
+
+    const allowButton = await waitForAnyVisible(page, allowAccessSelectors, 1500);
+    if (allowButton) return 'allow';
+
+    const passwordField = await waitForEditable(page, passwordInputSelectors, 1200);
+    const pageErrors = await readVisiblePageErrors(page);
+    const recentBadRequest = recentHttpErrors.find((item) => Date.now() - item.at < 30000);
+
+    if (pageErrors.length > 0 || recentBadRequest) {
+      const messages = [];
+      if (pageErrors.length > 0) messages.push(pageErrors.join(' | '));
+      if (recentBadRequest) messages.push(`HTTP ${recentBadRequest.status}: ${recentBadRequest.url}`);
+      const message = messages.join(' | ');
+      logLine(logs, `[${entry.index}] 密码提交后页面仍停留/返回错误: ${message}`, { stage: 'password-error', index: entry.index });
+      await sendPagePreview(page, '密码提交后页面错误', { stage: 'password-error', index: entry.index });
+
+      if (reloadAttempts < reloadMax) {
+        reloadAttempts += 1;
+        logLine(logs, `[${entry.index}] 尝试刷新页面恢复授权步骤 (${reloadAttempts}/${reloadMax})`, { stage: 'password-error-reload', index: entry.index });
+        recentHttpErrors.length = 0;
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+        await page.waitForTimeout(3000);
+        return waitAfterPasswordSubmit(page, passwordInputSelectors, authConfirmSelectors, allowAccessSelectors, recentHttpErrors, logs, entry, timeout, reloadAttempts, reloadMax);
+      }
+
+      throw new Error(`本次注册失败: 密码提交后连续报错，刷新 ${reloadMax} 次仍未恢复: ${message}`);
+    }
+
+    const elapsed = Date.now() - startedAt;
+    if (passwordField && elapsed > 8000) {
+      if (reloadAttempts < reloadMax) {
+        reloadAttempts += 1;
+        logLine(logs, `[${entry.index}] 密码提交后仍停留在密码页，尝试刷新恢复 (${reloadAttempts}/${reloadMax})`, { stage: 'password-stuck-reload', index: entry.index });
+        recentHttpErrors.length = 0;
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+        await page.waitForTimeout(3000);
+        return waitAfterPasswordSubmit(page, passwordInputSelectors, authConfirmSelectors, allowAccessSelectors, recentHttpErrors, logs, entry, timeout, reloadAttempts, reloadMax);
+      }
+      throw new Error(`本次注册失败: 密码提交后刷新 ${reloadMax} 次仍停留在密码页面，可能是密码策略不通过或请求被 AWS 拒绝`);
+    }
+
+    if (elapsed - lastNoticeAt > 10000) {
+      lastNoticeAt = elapsed;
+      logLine(logs, `[${entry.index}] 已提交密码，正在确认是否进入授权页面`, { stage: 'password-submit-wait', index: entry.index });
+    }
+    await page.waitForTimeout(1200);
+  }
+
+  if (reloadAttempts < reloadMax) {
+    reloadAttempts += 1;
+    logLine(logs, `[${entry.index}] 密码提交后未确认进入授权页，尝试刷新恢复 (${reloadAttempts}/${reloadMax})`, { stage: 'password-timeout-reload', index: entry.index });
+    recentHttpErrors.length = 0;
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(3000);
+    return waitAfterPasswordSubmit(page, passwordInputSelectors, authConfirmSelectors, allowAccessSelectors, recentHttpErrors, logs, entry, timeout, reloadAttempts, reloadMax);
+  }
+
+  throw new Error(`本次注册失败: 密码提交后刷新 ${reloadMax} 次仍未确认进入授权页面`);
 }
 
 async function selectFirstAvailableLabel(page, labels, value) {
@@ -365,15 +938,7 @@ async function selectAwsBuilderIdEmailPath(page, logs, entry, emailInputSelector
 }
 
 async function handleOptionalBirthdayStep(page, account, logs, entry, continueSelectors) {
-  const birthdayMarkers = [
-    'text=/生日|出生日期|出生年月|Birth date|Birthday|Date of birth/i',
-    'input[name*="birth" i]',
-    'input[id*="birth" i]',
-    'select[name*="birth" i]',
-    'select[id*="birth" i]'
-  ];
-
-  const marker = await waitForAnyVisible(page, birthdayMarkers, 4000);
+  const marker = await waitForAnyVisible(page, birthdayMarkers(), 4000);
   if (!marker) {
     return false;
   }
@@ -447,6 +1012,20 @@ async function applyKiroCookieFlow(page, context, config, logs, entry) {
 }
 
 async function runKiroRegistration(page, context, config, account, logs, entry) {
+  const recentHttpErrors = [];
+  page.on('response', (response) => {
+    const status = response.status();
+    if (status >= 400) {
+      const item = { status, url: response.url(), at: Date.now() };
+      recentHttpErrors.push(item);
+      if (recentHttpErrors.length > 8) recentHttpErrors.shift();
+      if (status === 400) {
+        logLine(logs, `[${entry.index}] 检测到页面请求返回 400: ${item.url}`, { stage: 'http-400', index: entry.index });
+      }
+    }
+  });
+
+  const customNameSelector = String(config?.selectors?.username || '').trim();
   const emailInputSelectors = [
     'input[placeholder="username@example.com"]',
     'input[placeholder="name@domain.com"]',
@@ -463,25 +1042,40 @@ async function runKiroRegistration(page, context, config, account, logs, entry) 
     'button:has-text("继续")'
   ];
   const nameInputSelectors = [
+    ...(customNameSelector ? [customNameSelector] : []),
     'input[placeholder="Maria José Silva"]',
     'input[placeholder="Full name"]',
     'input[placeholder="Name"]',
+    'input[placeholder*="姓名"]',
+    'input[placeholder*="用户名"]',
+    'input[placeholder*="名字"]',
+    'input[placeholder*="全名"]',
     'input[autocomplete="name"]',
     'input[name="name"]',
+    'input[name="username"]',
+    'input[name="userName"]',
     'input[id*="name"]',
+    'input[id*="username" i]',
+    'input[aria-label*="name" i]',
+    'input[aria-label*="姓名"]',
+    'input[aria-label*="用户名"]',
     'input[name*="name" i]',
-    'input[id*="name" i]'
+    'input[id*="name" i]',
+    'input[data-testid*="name" i]',
+    'input[data-testid*="username" i]'
   ];
   const codeInputSelectors = [
     'input[placeholder="6-digit"]',
     'input[aria-label*="Verification code" i]',
+    'input[aria-label*="code" i]',
     'input[name*="verification" i]',
     'input[id*="verification" i]',
     'input[name*="code" i]',
     'input[id*="code" i]',
     'input[placeholder="6 位数"]',
     'input[inputmode="numeric"]',
-    'input[class*="awsui_input"][type="text"]'
+    'input[autocomplete="one-time-code"]',
+    'input[maxlength="6"]'
   ];
   const verifySelectors = [
     'button[data-testid="email-verification-verify-button"]',
@@ -517,6 +1111,12 @@ async function runKiroRegistration(page, context, config, account, logs, entry) 
     'button[data-testid="allow-access-button"]',
     'button:has-text("Allow")'
   ];
+  const flowSelectors = {
+    emailInputSelectors,
+    nameInputSelectors,
+    codeInputSelectors,
+    firstContinueSelectors
+  };
 
   logLine(logs, `[${entry.index}] 进入 Kiro 注册页`, { stage: 'goto', index: entry.index });
   await page.goto(config.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
@@ -535,50 +1135,48 @@ async function runKiroRegistration(page, context, config, account, logs, entry) 
     });
   }
 
-  await fillFirstVisible(page, emailInputSelectors, account.email, logs, '邮箱', entry);
-  await sendPagePreview(page, '图2: 已填写邮箱', { stage: 'email', index: entry.index });
-  await clickFirstVisible(page, firstContinueSelectors, logs, '图2 继续按钮', entry);
-  await page.waitForTimeout(2000);
-  await sendPagePreview(page, '点击第一步继续后', { stage: 'continue-1', index: entry.index });
+  const stateAfterEntry = await driveRegistrationByPageState(
+    page,
+    account,
+    logs,
+    entry,
+    flowSelectors,
+    recentHttpErrors,
+    { timeout: 70000, reloadMax: config.retryMax }
+  );
 
-  const passwordPage = await waitForAnyVisible(page, ['input[placeholder="Enter password"]'], 4000);
-  if (passwordPage) {
-    logLine(logs, `[${entry.index}] 页面进入已有账号登录分支，当前流程按注册账号设计，停止继续`, { stage: 'login-branch', index: entry.index });
-    throw new Error('当前邮箱已进入登录分支，请更换邮箱后重试');
+  if (stateAfterEntry === 'code') {
+    await waitForVerificationCodePage(page, codeInputSelectors, account, logs, entry, firstContinueSelectors, {
+      recentHttpErrors,
+      reloadMax: config.retryMax
+    });
+    await sendPagePreview(page, '图4: 进入邮箱验证码页面', { stage: 'verify-code', index: entry.index });
+    logLine(logs, `[${entry.index}] 图4: 已进入邮箱验证码页面，开始从邮箱获取 6 位验证码`, { stage: 'verify-code', index: entry.index });
+
+    const codeResult = await waitMailboxCode({
+      providerId: account.mailbox?.providerId,
+      email: account.mailbox?.email,
+      token: account.mailbox?.token,
+      timeoutSec: 300,
+      intervalMs: 3000
+    });
+    if (!codeResult?.ok || !codeResult.code) {
+      throw new Error(codeResult?.message || '未获取到邮箱验证码');
+    }
+
+    logLine(logs, `[${entry.index}] 已获取验证码: ${codeResult.code}`, { stage: 'verify-code', index: entry.index });
+    await fillFirstVisible(page, codeInputSelectors, codeResult.code, logs, '邮箱验证码', entry);
+    await clickFirstVisible(page, verifySelectors, logs, '图4 验证码 Continue 按钮', entry, 20000);
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+    await sendPagePreview(page, '图4: 已提交邮箱验证码', { stage: 'verify-submit', index: entry.index });
+    await waitForPasswordPage(page, passwordInputSelectors, logs, entry);
+  } else if (stateAfterEntry !== 'password') {
+    throw new Error(`主流程失败: 未知页面状态 ${stateAfterEntry}`);
   }
 
-  await fillFirstVisible(page, nameInputSelectors, account.fullName, logs, '姓名', entry);
-  await sendPagePreview(page, '图3: 已填写姓名', { stage: 'name', index: entry.index });
-  logLine(logs, `[${entry.index}] 图3: 姓名填写完成，等待 5 秒后再点击 Continue`, { stage: 'name', index: entry.index });
-  await page.waitForTimeout(5000);
-  await clickFirstVisible(page, firstContinueSelectors, logs, '图3 继续按钮', entry);
-  await page.waitForTimeout(2500);
-  await handleOptionalBirthdayStep(page, account, logs, entry, firstContinueSelectors);
-  await sendPagePreview(page, '图4: 进入邮箱验证码页面', { stage: 'verify-code', index: entry.index });
-
-  await waitForAnyVisible(page, codeInputSelectors, 30000);
-  logLine(logs, `[${entry.index}] 图4: 已进入邮箱验证码页面，开始从邮箱获取 6 位验证码`, { stage: 'verify-code', index: entry.index });
-
-  const codeResult = await waitMailboxCode({
-    providerId: account.mailbox?.providerId,
-    email: account.mailbox?.email,
-    token: account.mailbox?.token,
-    timeoutSec: 300,
-    intervalMs: 3000
-  });
-  if (!codeResult?.ok || !codeResult.code) {
-    throw new Error(codeResult?.message || '未获取到邮箱验证码');
-  }
-
-  logLine(logs, `[${entry.index}] 已获取验证码: ${codeResult.code}`, { stage: 'verify-code', index: entry.index });
-  await fillFirstVisible(page, codeInputSelectors, codeResult.code, logs, '邮箱验证码', entry);
-  await clickFirstVisible(page, verifySelectors, logs, '图4 验证码 Continue 按钮', entry, 20000);
-  await sendPagePreview(page, '图4: 已提交邮箱验证码', { stage: 'verify-submit', index: entry.index });
-
-  await waitForAnyVisible(page, passwordInputSelectors, 45000);
-  await fillFirstVisible(page, passwordInputSelectors, account.password, logs, '密码', entry);
-  await fillFirstVisible(page, confirmPasswordSelectors, account.password, logs, '确认密码', entry);
+  await fillPasswordFieldsWithReloadRetry(page, passwordInputSelectors, confirmPasswordSelectors, account.password, logs, entry);
   await clickFirstVisible(page, verifySelectors, logs, '密码确认按钮', entry, 20000);
+  await waitAfterPasswordSubmit(page, passwordInputSelectors, authConfirmSelectors, allowAccessSelectors, recentHttpErrors, logs, entry, 45000, 0, config.retryMax);
   await sendPagePreview(page, '已提交密码', { stage: 'password-submit', index: entry.index });
 
   const authButton = await waitForAnyVisible(page, authConfirmSelectors, 20000);
@@ -607,6 +1205,9 @@ async function runRegisterBatch(payload) {
   const logs = [];
   const results = [];
   const providerId = String(payload?.providerId || 'kiro').trim();
+  const rawPassword = String(payload?.password || '').trim();
+  const fingerprintEnabled = Boolean(payload?.fingerprintEnabled);
+  const requestedFingerprintType = String(payload?.fingerprintType || 'random').trim() || 'random';
 
   sendAutomationProgress({ type: 'reset' });
 
@@ -616,14 +1217,16 @@ async function runRegisterBatch(payload) {
     usernamePrefix: String(payload?.usernamePrefix || 'user_').trim(),
     fullName: String(payload?.fullName || '').trim(),
     emailDomain: String(payload?.emailDomain || 'example.com').trim(),
-    password: String(payload?.password || '').trim() || generateDefaultPassword(),
+    password: rawPassword && rawPassword !== 'admin123456aA!' ? rawPassword : generateDefaultPassword(),
     birthYear: Math.max(1900, Math.min(Number(payload?.birthYear || 1998), 2020)),
     birthMonth: Math.max(1, Math.min(Number(payload?.birthMonth || 1), 12)),
     birthDay: Math.max(1, Math.min(Number(payload?.birthDay || 1), 31)),
     count: Math.max(1, Math.min(Number(payload?.count || 1), 50)),
     headless: Boolean(payload?.headless),
     stopOnError: Boolean(payload?.stopOnError),
-    fingerprintType: String(payload?.fingerprintType || 'none'),
+    fingerprintEnabled,
+    fingerprintType: fingerprintEnabled ? requestedFingerprintType : 'none',
+    retryMax: Math.max(0, Math.min(Number(payload?.retryMax ?? 3), 10)),
     mailbox: {
       autoCreate: Boolean(payload?.mailbox?.autoCreate),
       providerId: String(payload?.mailbox?.providerId || 'tempmail_lol').trim() || 'tempmail_lol'
@@ -651,6 +1254,7 @@ async function runRegisterBatch(payload) {
   logLine(logs, `启动任务: ${config.url}`, { stage: 'init' });
   logLine(logs, `计划注册数量: ${config.count}`, { stage: 'init' });
   logLine(logs, `指纹类型: ${config.fingerprintType}`, { stage: 'init' });
+  logLine(logs, `失败刷新重试次数: ${config.retryMax}`, { stage: 'init' });
   logLine(logs, `账号类型: ${config.providerId}`, { stage: 'init' });
   if (config.mailbox.autoCreate) {
     logLine(logs, `邮箱服务: ${config.mailbox.providerId}（自动创建）`, { stage: 'init' });
@@ -677,7 +1281,7 @@ async function runRegisterBatch(payload) {
       logLine(logs, `[${entry.index}/${config.count}] 开始: ${account.email}`, { stage: 'start', index: entry.index });
 
       try {
-        const fingerprintProfile = buildFingerprintProfile(config.fingerprintType);
+        const fingerprintProfile = buildFingerprintProfile(config.fingerprintType, browser.version());
         const contextOptions = buildContextOptionsFromProfile(fingerprintProfile);
         const context = await browser.newContext(contextOptions);
         if (fingerprintProfile) {

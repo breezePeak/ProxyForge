@@ -74,25 +74,32 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="relative min-h-screen overflow-hidden" :class="currentTheme === 'light' ? 'theme-light' : 'theme-dark'">
-    <div class="pointer-events-none absolute inset-0 opacity-70">
-      <div class="absolute left-[-12rem] top-[-10rem] h-80 w-80 rounded-full bg-cyan-500/15 blur-3xl" />
-      <div class="absolute right-[-8rem] top-10 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />
-      <div class="absolute bottom-[-10rem] left-1/3 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
+  <div class="app-shell" :class="currentTheme === 'light' ? 'theme-light' : 'theme-dark'">
+    <div class="pointer-events-none absolute inset-0 opacity-90">
+      <div class="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/30 via-transparent to-transparent" />
+      <div class="app-orb left-[-10rem] top-20 h-96 w-96 bg-teal-400/20" />
+      <div class="app-orb right-[-6rem] top-8 h-80 w-80 bg-amber-400/20" />
+      <div class="app-orb bottom-[-12rem] left-1/4 h-96 w-96 bg-cyan-400/20" />
     </div>
 
-    <header class="fixed inset-x-0 top-0 z-50 border-b border-slate-700/70 bg-slate-900/65 backdrop-blur-xl">
+    <header class="app-nav">
       <div class="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
         <button
-          class="bg-gradient-to-r from-cyan-300 to-emerald-300 bg-clip-text text-sm font-semibold tracking-wide text-transparent transition hover:opacity-80"
+          class="group flex cursor-pointer items-center gap-3 rounded-2xl text-left transition hover:opacity-90"
           @click="router.push('/')"
         >
-          All2API Account Center
+          <span class="flex h-9 w-9 items-center justify-center rounded-2xl border text-sm font-black" style="border-color: var(--app-border-strong); background: color-mix(in srgb, var(--app-primary) 12%, transparent); color: var(--app-primary);">
+            A
+          </span>
+          <span>
+            <span class="font-mono-brand block bg-gradient-to-r from-teal-300 via-cyan-200 to-amber-200 bg-clip-text text-sm font-bold tracking-[0.22em] text-transparent">All2API</span>
+            <span class="app-muted block text-[10px] uppercase tracking-[0.24em]">Account Automation Console</span>
+          </span>
         </button>
         <div class="flex items-center gap-2">
           <button
-            class="rounded-md border px-2 py-1 text-xs transition"
-            :class="themeMode === 'light' ? 'border-cyan-500 bg-cyan-500/15 text-cyan-200' : 'border-slate-600 bg-slate-900/45 text-slate-200 hover:border-cyan-500'"
+            class="cursor-pointer rounded-xl border px-2 py-1 text-xs transition"
+            :class="themeMode === 'light' ? 'border-teal-400/60 bg-teal-400/15 text-teal-200' : 'border-white/10 bg-white/[0.04] text-slate-300 hover:border-teal-400/50'"
             title="白天模式"
             @click="setThemeMode('light', $event)"
           >
@@ -102,8 +109,8 @@ onMounted(() => {
             </svg>
           </button>
           <button
-            class="rounded-md border px-2 py-1 text-xs transition"
-            :class="themeMode === 'auto' ? 'border-cyan-500 bg-cyan-500/15 text-cyan-200' : 'border-slate-600 bg-slate-900/45 text-slate-200 hover:border-cyan-500'"
+            class="cursor-pointer rounded-xl border px-2 py-1 text-xs transition"
+            :class="themeMode === 'auto' ? 'border-teal-400/60 bg-teal-400/15 text-teal-200' : 'border-white/10 bg-white/[0.04] text-slate-300 hover:border-teal-400/50'"
             title="自动模式"
             @click="setThemeMode('auto', $event)"
           >
@@ -113,8 +120,8 @@ onMounted(() => {
             </svg>
           </button>
           <button
-            class="rounded-md border px-2 py-1 text-xs transition"
-            :class="themeMode === 'dark' ? 'border-cyan-500 bg-cyan-500/15 text-cyan-200' : 'border-slate-600 bg-slate-900/45 text-slate-200 hover:border-cyan-500'"
+            class="cursor-pointer rounded-xl border px-2 py-1 text-xs transition"
+            :class="themeMode === 'dark' ? 'border-teal-400/60 bg-teal-400/15 text-teal-200' : 'border-white/10 bg-white/[0.04] text-slate-300 hover:border-teal-400/50'"
             title="黑夜模式"
             @click="setThemeMode('dark', $event)"
           >
@@ -126,7 +133,7 @@ onMounted(() => {
       </div>
     </header>
 
-    <main class="relative mx-auto max-w-7xl px-4 pb-8 pt-24">
+    <main class="relative mx-auto max-w-7xl px-4 pb-8 pt-28">
       <RouterView />
     </main>
 
