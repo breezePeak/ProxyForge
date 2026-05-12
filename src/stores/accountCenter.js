@@ -38,13 +38,15 @@ function createDefaults() {
         url: 'https://app.kiro.dev',
         usernamePrefix: 'kiro_',
         fullName: '',
-        password: 'admin123456aA!',
+        password: '',
         birthYear: 1998,
         birthMonth: 1,
         birthDay: 1,
         headless: false,
         stopOnError: true,
+        fingerprintEnabled: false,
         fingerprintType: 'random',
+        retryMax: 3,
         mailbox: {
           autoCreate: true,
           providerId: 'tempmail_lol'
@@ -163,6 +165,11 @@ export const useAccountCenterStore = defineStore('account-center', {
         if (this.settingsByProvider.kiro.url === 'https://view.awsapps.com/start') {
           this.settingsByProvider.kiro.url = defaults.settingsByProvider.kiro.url;
         }
+        this.settingsByProvider.kiro.fingerprintEnabled = Boolean(this.settingsByProvider.kiro.fingerprintEnabled);
+        if (!this.settingsByProvider.kiro.fingerprintType || this.settingsByProvider.kiro.fingerprintType === 'none') {
+          this.settingsByProvider.kiro.fingerprintType = defaults.settingsByProvider.kiro.fingerprintType;
+        }
+        this.settingsByProvider.kiro.retryMax = Number(this.settingsByProvider.kiro.retryMax || defaults.settingsByProvider.kiro.retryMax);
         this.settingsByProvider.codex = mergeProviderSettings(defaults.settingsByProvider.codex, this.settingsByProvider.codex);
         this.settingsByProvider.cursor = mergeProviderSettings(defaults.settingsByProvider.cursor, this.settingsByProvider.cursor);
       } catch (_e) {}
