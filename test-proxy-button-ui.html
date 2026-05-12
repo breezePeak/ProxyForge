@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proxy Button UI Test</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="max-w-6xl mx-auto">
+    <h1 class="text-3xl font-bold text-cyan-300 mb-6">Task 11.1: 反代按钮 UI 测试</h1>
+    
+    <div class="grid gap-6 mb-8">
+      <div class="bg-slate-900/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
+        <h2 class="text-xl font-semibold text-emerald-300 mb-4">✅ 实现要求</h2>
+        <ul class="space-y-2 text-slate-300">
+          <li class="flex items-start gap-2">
+            <span class="text-green-400">✓</span>
+            <span>在账号卡片上添加反代配置按钮</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-green-400">✓</span>
+            <span>按钮位置合适（右上角，与切换按钮并列）</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-green-400">✓</span>
+            <span>已配置反代的账号显示绿色高亮</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <h2 class="text-2xl font-semibold text-cyan-300 mb-4">按钮状态演示</h2>
+    
+    <div class="grid gap-3 grid-cols-[repeat(auto-fill,280px)] justify-start">
+      <!-- 账号卡片 1: 未配置反代 -->
+      <div class="relative rounded-lg border border-slate-700 bg-slate-950/60 p-4 text-left transition w-[280px] hover:border-slate-500">
+        <!-- 切换账号和反代按钮 -->
+        <div class="absolute top-3 right-3 flex gap-2">
+          <button
+            class="rounded-md p-1.5 transition bg-slate-800 text-cyan-400 hover:bg-cyan-900 hover:text-cyan-300"
+            title="切换到此账号"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+          </button>
+          <button
+            class="rounded-md p-1.5 transition bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-300"
+            title="配置反代"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="flex items-start justify-between gap-3 pr-20">
+          <div class="min-w-0">
+            <p class="truncate text-sm font-semibold text-slate-100">kiro_user_001</p>
+            <p class="mt-1 truncate text-xs text-slate-400">user001@example.com</p>
+          </div>
+          <span class="rounded-full border border-emerald-500/50 px-2 py-1 text-[11px] text-emerald-300 whitespace-nowrap">
+            success
+          </span>
+        </div>
+
+        <div class="mt-4">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">额度用量</span>
+            <span class="font-semibold text-slate-100">150/500</span>
+          </div>
+          <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-800">
+            <div class="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400" style="width: 30%"></div>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="rounded-full border border-slate-600 bg-slate-900/70 px-2 py-1 text-[11px] text-slate-300">
+            Claude Sonnet
+          </span>
+        </div>
+
+        <div class="mt-3 text-center text-xs text-slate-500">
+          状态: 未配置反代 (灰色按钮)
+        </div>
+      </div>
+
+      <!-- 账号卡片 2: 已配置反代 (已启用) -->
+      <div class="relative rounded-lg border border-cyan-500 bg-cyan-950/25 shadow-[0_0_24px_rgba(34,211,238,0.12)] p-4 text-left transition w-[280px]">
+        <!-- 切换账号和反代按钮 -->
+        <div class="absolute top-3 right-3 flex gap-2">
+          <button
+            class="rounded-md p-1.5 transition bg-slate-700 text-slate-500 cursor-not-allowed"
+            title="当前活跃账号"
+            disabled
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+          </button>
+          <button
+            class="rounded-md p-1.5 transition bg-green-900 text-green-300 hover:bg-green-800"
+            title="配置反代"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="flex items-start justify-between gap-3 pr-20">
+          <div class="min-w-0">
+            <p class="truncate text-sm font-semibold text-slate-100">kiro_user_002</p>
+            <p class="mt-1 truncate text-xs text-slate-400">user002@example.com</p>
+          </div>
+          <span class="rounded-full border border-emerald-500/50 px-2 py-1 text-[11px] text-emerald-300 whitespace-nowrap">
+            success
+          </span>
+        </div>
+
+        <div class="mt-4">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">额度用量</span>
+            <span class="font-semibold text-slate-100">280/500</span>
+          </div>
+          <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-800">
+            <div class="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400" style="width: 56%"></div>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="rounded-full border border-slate-600 bg-slate-900/70 px-2 py-1 text-[11px] text-slate-300">
+            Claude Sonnet
+          </span>
+        </div>
+
+        <div class="mt-3 text-center text-xs text-green-400 font-semibold">
+          ✓ 反代已启用 (绿色高亮)
+        </div>
+      </div>
+
+      <!-- 账号卡片 3: 已配置反代 (已禁用) -->
+      <div class="relative rounded-lg border border-slate-700 bg-slate-950/60 p-4 text-left transition w-[280px] hover:border-slate-500">
+        <!-- 切换账号和反代按钮 -->
+        <div class="absolute top-3 right-3 flex gap-2">
+          <button
+            class="rounded-md p-1.5 transition bg-slate-800 text-cyan-400 hover:bg-cyan-900 hover:text-cyan-300"
+            title="切换到此账号"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+          </button>
+          <button
+            class="rounded-md p-1.5 transition bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-300"
+            title="配置反代"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="flex items-start justify-between gap-3 pr-20">
+          <div class="min-w-0">
+            <p class="truncate text-sm font-semibold text-slate-100">kiro_user_003</p>
+            <p class="mt-1 truncate text-xs text-slate-400">user003@example.com</p>
+          </div>
+          <span class="rounded-full border border-emerald-500/50 px-2 py-1 text-[11px] text-emerald-300 whitespace-nowrap">
+            success
+          </span>
+        </div>
+
+        <div class="mt-4">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">额度用量</span>
+            <span class="font-semibold text-slate-100">420/500</span>
+          </div>
+          <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-800">
+            <div class="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400" style="width: 84%"></div>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="rounded-full border border-slate-600 bg-slate-900/70 px-2 py-1 text-[11px] text-slate-300">
+            Claude Sonnet
+          </span>
+        </div>
+
+        <div class="mt-3 text-center text-xs text-slate-500">
+          反代已配置但未启用 (灰色按钮)
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-8 bg-slate-900/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
+      <h2 class="text-xl font-semibold text-cyan-300 mb-4">按钮样式说明</h2>
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <h3 class="text-sm font-semibold text-emerald-300 mb-2">未配置反代</h3>
+          <div class="flex items-center gap-3 mb-2">
+            <button class="rounded-md p-1.5 transition bg-slate-800 text-slate-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
+            </button>
+            <span class="text-sm text-slate-300">灰色背景 + 灰色图标</span>
+          </div>
+          <p class="text-xs text-slate-400">表示该账号尚未配置反代服务器</p>
+        </div>
+
+        <div>
+          <h3 class="text-sm font-semibold text-emerald-300 mb-2">反代已启用</h3>
+          <div class="flex items-center gap-3 mb-2">
+            <button class="rounded-md p-1.5 transition bg-green-900 text-green-300">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
+            </button>
+            <span class="text-sm text-slate-300">绿色背景 + 绿色图标</span>
+          </div>
+          <p class="text-xs text-slate-400">表示该账号已配置反代且处于启用状态</p>
+        </div>
+      </div>
+
+      <div class="mt-6 p-4 bg-cyan-950/30 border border-cyan-700/50 rounded-lg">
+        <h3 class="text-sm font-semibold text-cyan-300 mb-2">交互行为</h3>
+        <ul class="space-y-2 text-xs text-slate-300">
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400">•</span>
+            <span>点击反代按钮会打开配置模态框</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400">•</span>
+            <span>使用 @click.stop 防止触发卡片选中事件</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400">•</span>
+            <span>鼠标悬停时按钮颜色会变亮</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400">•</span>
+            <span>配置保存后按钮颜色会立即更新</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-6 bg-emerald-950/30 border border-emerald-700/50 rounded-lg p-6">
+      <h2 class="text-xl font-semibold text-emerald-300 mb-3">✅ 任务完成总结</h2>
+      <p class="text-slate-300 mb-4">
+        Task 11.1 "添加反代按钮 UI" 已完全实现，所有需求均已满足：
+      </p>
+      <ul class="space-y-2 text-sm text-slate-300">
+        <li class="flex items-start gap-2">
+          <span class="text-emerald-400 font-bold">✓</span>
+          <span><strong>反代按钮已添加</strong>：每个账号卡片右上角都有反代配置按钮</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <span class="text-emerald-400 font-bold">✓</span>
+          <span><strong>位置合适</strong>：按钮位于卡片右上角，与切换账号按钮并列，不影响卡片内容</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <span class="text-emerald-400 font-bold">✓</span>
+          <span><strong>视觉指示器</strong>：已配置且启用反代的账号显示绿色高亮，清晰易识别</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <span class="text-emerald-400 font-bold">✓</span>
+          <span><strong>交互完善</strong>：点击按钮打开配置模态框，事件处理正确</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <span class="text-emerald-400 font-bold">✓</span>
+          <span><strong>样式优雅</strong>：平滑过渡动画，悬停效果良好</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    // 添加交互演示
+    document.querySelectorAll('button[title="配置反代"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        alert('在实际应用中，这里会打开反代配置模态框');
+      });
+    });
+
+    document.querySelectorAll('button[title="切换到此账号"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        alert('在实际应用中，这里会切换到该账号');
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs/promises');
 const { FingerprintGenerator } = require('./fingerprint/generator.cjs');
@@ -58,8 +59,181 @@ const PROVIDERS = [
   }
 ];
 
+const DEFAULT_KIRO_MODELS = [
+  'Auto',
+  'Claude Opus 4.7',
+  'Claude Opus 4.6',
+  'Claude Opus 4.5',
+  'Claude Sonnet 4.6',
+  'Claude Sonnet 4.5',
+  'Claude Sonnet 4.0',
+  'Claude Haiku 4.5',
+  'DeepSeek 3.2',
+  'MiniMax M2.5',
+  'GLM-5',
+  'MiniMax M2.1',
+  'Qwen3 Coder Next'
+];
+
 function accountsFilePath() {
   return path.join(app.getPath('userData'), 'accounts.json');
+}
+
+function safePathSegment(value) {
+  return String(value || 'default')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .slice(0, 80) || 'default';
+}
+
+function kiroProfilesDir() {
+  return path.join(app.getPath('userData'), 'kiro-profiles');
+}
+
+function kiroProfilePath(accountId) {
+  return path.join(kiroProfilesDir(), safePathSegment(accountId));
+}
+
+function kiroWebSessionsDir() {
+  return path.join(app.getPath('userData'), 'kiro-web-sessions');
+}
+
+function kiroWebProfilePath(accountId) {
+  return path.join(kiroWebSessionsDir(), safePathSegment(accountId), 'profile');
+}
+
+function kiroStorageStatePath(accountId) {
+  return path.join(kiroWebSessionsDir(), safePathSegment(accountId), 'storage-state.json');
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function resolveKiroExecutable(customPath) {
+  const explicitPath = String(customPath || '').trim();
+  if (explicitPath) {
+    if (await pathExists(explicitPath)) return explicitPath;
+    throw new Error(`Kiro 客户端路径不存在: ${explicitPath}`);
+  }
+
+  const candidates = [];
+  if (process.platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA || '';
+    const programFiles = process.env.ProgramFiles || '';
+    const programFilesX86 = process.env['ProgramFiles(x86)'] || '';
+    const userProfile = process.env.USERPROFILE || '';
+    const homeDrive = process.env.HOMEDRIVE || 'C:';
+    
+    // 获取所有可能的用户目录盘符
+    const userProfilesDir = path.join(homeDrive, 'Users');
+    let userName = '';
+    if (userProfile) {
+      userName = path.basename(userProfile);
+    }
+    
+    // 常见安装路径
+    candidates.push(
+      // 标准 LOCALAPPDATA 路径
+      path.join(localAppData, 'Programs', 'Kiro', 'Kiro.exe'),
+      path.join(localAppData, 'kiro', 'Kiro.exe'),
+      // Program Files 路径
+      path.join(programFiles, 'Kiro', 'Kiro.exe'),
+      path.join(programFilesX86, 'Kiro', 'Kiro.exe'),
+      // 当前用户目录（支持其他盘符）
+      path.join(userProfile, 'AppData', 'Local', 'Programs', 'Kiro', 'Kiro.exe'),
+      path.join(userProfile, 'AppData', 'Local', 'kiro', 'Kiro.exe')
+    );
+    
+    // 尝试其他盘符的用户目录（D、E、F 等）
+    const drives = ['D', 'E', 'F', 'G'];
+    for (const drive of drives) {
+      if (userName) {
+        candidates.push(
+          path.join(`${drive}:\\Users`, userName, 'AppData', 'Local', 'Programs', 'Kiro', 'Kiro.exe'),
+          path.join(`${drive}:\\Users`, userName, 'AppData', 'Local', 'kiro', 'Kiro.exe')
+        );
+      }
+      // 也检查直接路径
+      candidates.push(
+        path.join(`${drive}:\\Users`, 'Administrator', 'AppData', 'Local', 'Programs', 'Kiro', 'Kiro.exe'),
+        path.join(`${drive}:\\Users`, 'Administrator', 'AppData', 'Local', 'kiro', 'Kiro.exe')
+      );
+    }
+    
+    // 尝试从 PATH 环境变量查找
+    try {
+      const { execSync } = require('child_process');
+      const whereResult = execSync('where kiro 2>nul', { encoding: 'utf8', timeout: 5000 }).trim();
+      if (whereResult) {
+        const firstLine = whereResult.split('\n')[0].trim();
+        if (firstLine && await pathExists(firstLine)) {
+          // 如果找到的是 bin\kiro，尝试查找 Kiro.exe
+          const dir = path.dirname(firstLine);
+          const parentDir = path.dirname(dir);
+          const exeInSameDir = path.join(dir, 'Kiro.exe');
+          const exeInParentDir = path.join(parentDir, 'Kiro.exe');
+          
+          if (await pathExists(exeInSameDir)) candidates.push(exeInSameDir);
+          if (await pathExists(exeInParentDir)) candidates.push(exeInParentDir);
+          
+          // 将 where 找到的路径也加入候选（作为后备）
+          candidates.push(firstLine);
+        }
+      }
+    } catch (_e) {}
+    
+    // 尝试从注册表读取安装路径
+    try {
+      const { execSync } = require('child_process');
+      const regResult = execSync(
+        'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall" /s /f "Kiro" /k 2>nul',
+        { encoding: 'utf8', timeout: 5000 }
+      ).trim();
+      if (regResult) {
+        const keyMatch = regResult.match(/HKCU\\[^\s]+/);
+        if (keyMatch) {
+          const installLocation = execSync(
+            `reg query "${keyMatch[0]}" /v "InstallLocation" 2>nul`,
+            { encoding: 'utf8', timeout: 5000 }
+          );
+          const pathMatch = installLocation.match(/InstallLocation\s+REG_SZ\s+(.+)/);
+          if (pathMatch) {
+            const regPath = path.join(pathMatch[1].trim(), 'Kiro.exe');
+            if (await pathExists(regPath)) return regPath;
+          }
+        }
+      }
+    } catch (_e) {}
+    
+  } else if (process.platform === 'darwin') {
+    candidates.push('/Applications/Kiro.app/Contents/MacOS/Kiro');
+    // 也检查用户目录下的 Applications
+    const homeDir = process.env.HOME || '';
+    if (homeDir) {
+      candidates.push(path.join(homeDir, 'Applications', 'Kiro.app', 'Contents', 'MacOS', 'Kiro'));
+    }
+  } else {
+    candidates.push('/usr/bin/kiro', '/usr/local/bin/kiro', '/opt/Kiro/kiro');
+    // 也检查用户本地目录
+    const homeDir = process.env.HOME || '';
+    if (homeDir) {
+      candidates.push(
+        path.join(homeDir, '.local', 'bin', 'kiro'),
+        path.join(homeDir, 'bin', 'kiro')
+      );
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) return candidate;
+  }
+
+  throw new Error('未找到 Kiro 客户端，请在配置里填写 Kiro 可执行文件路径');
 }
 
 async function readStoredAccounts() {
@@ -92,6 +266,334 @@ async function appendStoredAccount(providerId, entry) {
   await fs.mkdir(path.dirname(accountsFilePath()), { recursive: true });
   await fs.writeFile(accountsFilePath(), `${JSON.stringify(list, null, 2)}\n`, 'utf8');
   return record;
+}
+
+async function updateAccountQuota(accountId, quotaData) {
+  try {
+    const list = await readStoredAccounts();
+    const index = list.findIndex(a => a.id === accountId);
+    if (index === -1) return;
+    
+    list[index] = {
+      ...list[index],
+      quotaUsed: quotaData.quotaUsed ?? list[index].quotaUsed,
+      quotaTotal: quotaData.quotaTotal ?? list[index].quotaTotal,
+      availableModels: quotaData.availableModels?.length > 0 ? quotaData.availableModels : list[index].availableModels,
+      lastQuotaSyncAt: new Date().toISOString()
+    };
+    
+    await fs.mkdir(path.dirname(accountsFilePath()), { recursive: true });
+    await fs.writeFile(accountsFilePath(), `${JSON.stringify(list, null, 2)}\n`, 'utf8');
+  } catch (error) {
+    console.error('[updateAccountQuota] Error:', error.message);
+  }
+}
+
+async function launchKiroClient(payload) {
+  const accountId = String(payload?.accountId || '').trim();
+  if (!accountId) throw new Error('缺少账号 ID');
+
+  const profilePath = kiroProfilePath(accountId);
+  const executablePath = await resolveKiroExecutable(payload?.executablePath);
+  await fs.mkdir(profilePath, { recursive: true });
+
+  const args = [
+    '--user-data-dir',
+    profilePath
+  ];
+  const workspacePath = String(payload?.workspacePath || '').trim();
+  if (workspacePath) args.push(workspacePath);
+
+  // Apply proxy configuration if provided
+  const proxyConfig = payload?.proxyConfig;
+  if (proxyConfig && proxyConfig.enabled) {
+    const { server, port, protocol, username, password } = proxyConfig;
+    
+    // Build proxy server URL
+    let proxyUrl = `${protocol || 'http'}://${server}:${port}`;
+    
+    // Add authentication if provided
+    if (username && password) {
+      proxyUrl = `${protocol || 'http'}://${username}:${password}@${server}:${port}`;
+    }
+    
+    // Add Chromium proxy arguments
+    args.push(`--proxy-server=${proxyUrl}`);
+  }
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(executablePath, args, {
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let settled = false;
+    let errorOutput = '';
+
+    child.stderr?.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+
+    // 等待进程启动成功（进程存在超过 1 秒视为启动成功）
+    const startupTimer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        child.unref();
+        resolve({
+          ok: true,
+          executablePath,
+          profilePath,
+          pid: child.pid,
+          launchedAt: new Date().toISOString(),
+          proxyApplied: !!(proxyConfig && proxyConfig.enabled)
+        });
+      }
+    }, 1000);
+
+    child.on('error', (err) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(startupTimer);
+        reject(new Error(`启动 Kiro 失败: ${err.message}`));
+      }
+    });
+
+    child.on('exit', (code, signal) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(startupTimer);
+        if (code !== 0 && code !== null) {
+          reject(new Error(`Kiro 进程退出，代码: ${code}${errorOutput ? `，错误: ${errorOutput}` : ''}`));
+        } else {
+          // 进程立即退出但没有错误码，可能是单实例限制
+          resolve({
+            ok: true,
+            executablePath,
+            profilePath,
+            pid: child.pid,
+            launchedAt: new Date().toISOString(),
+            proxyApplied: !!(proxyConfig && proxyConfig.enabled),
+            note: '进程已退出，可能已有实例在运行'
+          });
+        }
+      }
+    });
+  });
+}
+
+function pickLoginCookie(cookies, cookieName) {
+  const expectedName = String(cookieName || 'x-amz-sso_authn').trim();
+  return cookies.find((cookie) => cookie.name === expectedName && cookie.value)
+    || cookies.find((cookie) => /sso|auth|session|token/i.test(cookie.name) && cookie.value)
+    || null;
+}
+
+function walkJson(value, visit, pathParts = []) {
+  if (!value || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => walkJson(item, visit, [...pathParts, String(index)]));
+    return;
+  }
+
+  visit(value, pathParts);
+  for (const [key, child] of Object.entries(value)) {
+    walkJson(child, visit, [...pathParts, key]);
+  }
+}
+
+function readNumberByKeys(source, keys) {
+  if (!source || typeof source !== 'object') return null;
+  for (const [key, value] of Object.entries(source)) {
+    if (keys.some((pattern) => pattern.test(key)) && Number.isFinite(Number(value))) {
+      return Number(value);
+    }
+  }
+  return null;
+}
+
+function extractUsageAndModels(json) {
+  const result = {
+    quotaUsed: null,
+    quotaTotal: null,
+    availableModels: []
+  };
+
+  walkJson(json, (node) => {
+    if (result.quotaUsed === null) {
+      result.quotaUsed = readNumberByKeys(node, [/used/i, /consumed/i, /usage/i, /creditsUsed/i]);
+    }
+    if (result.quotaTotal === null) {
+      result.quotaTotal = readNumberByKeys(node, [/limit/i, /total/i, /quota/i, /credits/i, /monthly/i]);
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      if (!/model/i.test(key)) continue;
+      if (Array.isArray(value)) {
+        const names = value
+          .map((item) => {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object') return item.name || item.displayName || item.label || item.id;
+            return '';
+          })
+          .filter(Boolean);
+        if (names.length > result.availableModels.length) result.availableModels = names;
+      } else if (typeof value === 'string' && value.length <= 80) {
+        result.availableModels.push(value);
+      }
+    }
+  });
+
+  result.availableModels = [...new Set(result.availableModels)];
+  return result;
+}
+
+function isInterestingKiroApi(url) {
+  return /kiro|amazonaws|awsapps|builder/i.test(url)
+    && /usage|quota|credit|billing|subscription|entitlement|model|profile|account/i.test(url);
+}
+
+async function captureKiroWebAccount(payload) {
+  const { chromium } = require('playwright');
+  const accountId = `kiro_manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const profilePath = kiroWebProfilePath(accountId);
+  const storageStatePath = kiroStorageStatePath(accountId);
+  const url = String(payload?.url || 'https://app.kiro.dev').trim() || 'https://app.kiro.dev';
+  const cookieName = String(payload?.kiroFlow?.cookieName || 'x-amz-sso_authn').trim() || 'x-amz-sso_authn';
+  const maxWaitSeconds = Math.max(30, Math.min(Number(payload?.maxWaitSeconds || payload?.kiroFlow?.maxWaitSeconds || 300), 900));
+  const discoveredApis = [];
+  let discoveredUsage = {};
+
+  await fs.mkdir(path.dirname(storageStatePath), { recursive: true });
+  
+  // Build context options with proxy configuration if provided
+  const contextOptions = {
+    headless: false,
+    slowMo: 80,
+    viewport: { width: 1280, height: 820 }
+  };
+  
+  // Apply proxy configuration if provided
+  const proxyConfig = payload?.proxyConfig;
+  if (proxyConfig && proxyConfig.enabled) {
+    const { server, port, protocol, username, password } = proxyConfig;
+    
+    // Build proxy server URL
+    const proxyServer = `${protocol || 'http'}://${server}:${port}`;
+    
+    contextOptions.proxy = {
+      server: proxyServer
+    };
+    
+    // Add authentication if provided
+    if (username && password) {
+      contextOptions.proxy.username = username;
+      contextOptions.proxy.password = password;
+    }
+  }
+  
+  const context = await chromium.launchPersistentContext(profilePath, contextOptions);
+
+  let page = context.pages()[0] || await context.newPage();
+  page.on('response', async (response) => {
+    const responseUrl = response.url();
+    if (!isInterestingKiroApi(responseUrl)) return;
+    const item = {
+      url: responseUrl,
+      method: response.request().method(),
+      status: response.status()
+    };
+    if (!discoveredApis.some((api) => api.url === item.url && api.method === item.method)) {
+      discoveredApis.push(item);
+    }
+
+    const contentType = response.headers()['content-type'] || '';
+    if (!contentType.includes('json')) return;
+    try {
+      const json = await response.json();
+      const extracted = extractUsageAndModels(json);
+      if (extracted.quotaUsed !== null) discoveredUsage.quotaUsed = extracted.quotaUsed;
+      if (extracted.quotaTotal !== null) discoveredUsage.quotaTotal = extracted.quotaTotal;
+      if (extracted.availableModels.length > 0) discoveredUsage.availableModels = extracted.availableModels;
+    } catch (_error) {}
+  });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+
+  let hit = null;
+  const startAt = Date.now();
+  while (Date.now() - startAt < maxWaitSeconds * 1000) {
+    try {
+      const cookies = await context.cookies();
+      hit = pickLoginCookie(cookies, cookieName);
+      if (hit) break;
+      await page.waitForTimeout(1000);
+    } catch (e) {
+      // Browser was closed by user — silently abort
+      if (e.message && (e.message.includes('closed') || e.message.includes('Target page'))) {
+        try { await context.close(); } catch (_) {}
+        return { ok: false, reason: 'browser_closed' };
+      }
+      throw e;
+    }
+  }
+
+  if (!hit) {
+    await context.close();
+    throw new Error(`等待登录超时，未检测到 ${cookieName} 或登录会话 Cookie`);
+  }
+
+  // 等待额度 API 被调用（最多额外等待 10 秒）
+  const quotaWaitStart = Date.now();
+  const quotaWaitTimeout = 10000;
+  while (Date.now() - quotaWaitStart < quotaWaitTimeout) {
+    try {
+      if (discoveredUsage.quotaUsed !== null || discoveredUsage.quotaTotal !== null) {
+        break;
+      }
+      await page.waitForTimeout(500);
+    } catch (e) {
+      if (e.message && (e.message.includes('closed') || e.message.includes('Target page'))) {
+        break; // quota already captured enough, or browser closed — continue
+      }
+      throw e;
+    }
+  }
+
+  await context.storageState({ path: storageStatePath });
+  const title = await page.title().catch(() => '');
+  const currentUrl = page.url();
+  await context.close();
+
+  const account = {
+    id: accountId,
+    providerId: 'kiro',
+    status: 'success',
+    username: title || 'Kiro 手动添加账号',
+    email: '',
+    note: '网页登录态添加',
+    authMode: 'web-session',
+    webProfilePath: profilePath,
+    storageStatePath,
+    localFilePath: accountsFilePath(),
+    ssoCookieName: hit.name,
+    ssoTokenPreview: `${hit.value.slice(0, 50)}...`,
+    quotaUsed: 0,
+    quotaTotal: 0,
+    ...discoveredUsage,
+    availableModels: discoveredUsage.availableModels || DEFAULT_KIRO_MODELS,
+    discoveredApis,
+    lastLoginUrl: currentUrl,
+    addedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  };
+  const list = await readStoredAccounts();
+  list.unshift(account);
+  await fs.mkdir(path.dirname(accountsFilePath()), { recursive: true });
+  await fs.writeFile(accountsFilePath(), `${JSON.stringify(list, null, 2)}\n`, 'utf8');
+
+  return {
+    ok: true,
+    account
+  };
 }
 
 function htmlToText(html) {
@@ -143,6 +645,8 @@ function createWindow() {
       nodeIntegration: false
     }
   });
+
+  Menu.setApplicationMenu(null);
 
   if (isDev) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
@@ -962,9 +1466,113 @@ async function waitMailboxCode(payload) {
 
 app.whenReady().then(() => {
   ipcMain.handle('automation:register-batch', async (_event, payload) => runRegisterBatch(payload));
+  ipcMain.handle('automation:launch-kiro-client', async (_event, payload) => launchKiroClient(payload));
+  ipcMain.handle('automation:capture-kiro-web-account', async (_event, payload) => captureKiroWebAccount(payload));
   ipcMain.handle('mailbox:list-providers', async () => PROVIDERS);
   ipcMain.handle('mailbox:create', async (_event, payload) => createMailbox(payload));
   ipcMain.handle('mailbox:wait-code', async (_event, payload) => waitMailboxCode(payload));
+  ipcMain.handle('quota:getQuota', async (_event, params) => {
+    try {
+      const { providerId, accountId } = params || {};
+      
+      if (!providerId || !accountId) {
+        throw new Error('缺少必需参数: providerId 和 accountId');
+      }
+      
+      // 读取账号信息
+      const accounts = await readStoredAccounts();
+      const account = accounts.find(a => a.id === accountId);
+      
+      if (!account) {
+        throw new Error('账号不存在');
+      }
+      
+      // 如果有 webProfilePath 或 storageStatePath，使用 Playwright 拦截 API 获取额度
+      const profilePath = account.webProfilePath || kiroWebProfilePath(accountId);
+      const storageStatePath = account.storageStatePath || kiroStorageStatePath(accountId);
+      
+      // 检查是否有可用的登录状态
+      const hasStorageState = await pathExists(storageStatePath);
+      const hasProfile = await pathExists(profilePath);
+      
+      if (hasStorageState || hasProfile) {
+        const { chromium } = require('playwright');
+        
+        let context;
+        try {
+          // 使用持久化上下文，它会自动保存和恢复状态
+          context = await chromium.launchPersistentContext(
+            profilePath,
+            {
+              headless: true,
+              viewport: { width: 1280, height: 820 }
+            }
+          );
+          
+          let quotaData = { quotaUsed: null, quotaTotal: null, availableModels: [] };
+          
+          // 监听 API 响应
+          context.on('response', async (response) => {
+            const url = response.url();
+            if (!isInterestingKiroApi(url)) return;
+            
+            const contentType = response.headers()['content-type'] || '';
+            if (!contentType.includes('json')) return;
+            
+            try {
+              const json = await response.json();
+              const extracted = extractUsageAndModels(json);
+              if (extracted.quotaUsed !== null) quotaData.quotaUsed = extracted.quotaUsed;
+              if (extracted.quotaTotal !== null) quotaData.quotaTotal = extracted.quotaTotal;
+              if (extracted.availableModels.length > 0) quotaData.availableModels = extracted.availableModels;
+            } catch (_e) {}
+          });
+          
+          // 打开 Kiro 页面触发 API 请求
+          const page = context.pages()[0] || await context.newPage();
+          await page.goto('https://app.kiro.dev', { waitUntil: 'networkidle', timeout: 30000 });
+          
+          // 等待 API 请求完成
+          await page.waitForTimeout(5000);
+          
+          // 如果没有拦截到额度数据，尝试刷新页面再试一次
+          if (quotaData.quotaUsed === null && quotaData.quotaTotal === null) {
+            await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
+            await page.waitForTimeout(3000);
+          }
+          
+          await context.close();
+          
+          if (quotaData.quotaUsed !== null || quotaData.quotaTotal !== null) {
+            // 更新账号缓存
+            await updateAccountQuota(accountId, quotaData);
+            
+            return {
+              quotaUsed: quotaData.quotaUsed || 0,
+              quotaTotal: quotaData.quotaTotal || 0,
+              availableModels: quotaData.availableModels
+            };
+          }
+        } catch (err) {
+          if (context) {
+            try { await context.close(); } catch (_e) {}
+          }
+          console.error('[quota:getQuota] Playwright error:', err.message);
+        }
+      }
+      
+      // 降级：返回缓存的数据
+      return {
+        quotaUsed: account.quotaUsed || 0,
+        quotaTotal: account.quotaTotal || 0,
+        availableModels: account.availableModels || []
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[quota:getQuota] Error:', errorMessage);
+      throw new Error(`获取额度信息失败: ${errorMessage}`);
+    }
+  });
 
   createWindow();
 

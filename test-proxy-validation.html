@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proxy Config Validation Test</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 20px;
+      background: #1e293b;
+      color: #e2e8f0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .test-section {
+      background: #334155;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .test-case {
+      margin: 10px 0;
+      padding: 10px;
+      background: #475569;
+      border-radius: 4px;
+    }
+    .pass { border-left: 4px solid #10b981; }
+    .fail { border-left: 4px solid #ef4444; }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+    .error {
+      color: #f87171;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+    input, select {
+      width: 100%;
+      padding: 8px;
+      margin: 5px 0;
+      border-radius: 4px;
+      border: 1px solid #64748b;
+      background: #1e293b;
+      color: #e2e8f0;
+    }
+    input.error-input {
+      border-color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+    }
+    label {
+      display: block;
+      margin: 10px 0;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="container">
+      <h1>Proxy Config Validation Test</h1>
+      
+      <div class="test-section">
+        <h2>Manual Test Form</h2>
+        <form @submit.prevent="testValidation">
+          <label>
+            Server Address:
+            <input 
+              v-model="formData.server" 
+              :class="{ 'error-input': errors.server }"
+              placeholder="proxy.example.com"
+            />
+            <div v-if="errors.server" class="error">{{ errors.server }}</div>
+          </label>
+          
+          <label>
+            Port:
+            <input 
+              v-model.number="formData.port" 
+              type="number"
+              :class="{ 'error-input': errors.port }"
+            />
+            <div v-if="errors.port" class="error">{{ errors.port }}</div>
+          </label>
+          
+          <label>
+            Protocol:
+            <select v-model="formData.protocol">
+              <option value="http">HTTP</option>
+              <option value="https">HTTPS</option>
+              <option value="socks5">SOCKS5</option>
+            </select>
+          </label>
+          
+          <div v-if="errors.general" class="error">{{ errors.general }}</div>
+          
+          <button type="submit">Validate</button>
+          <button type="button" @click="resetForm">Reset</button>
+        </form>
+        
+        <div v-if="validationResult" :class="['test-case', validationResult.pass ? 'pass' : 'fail']">
+          <strong>{{ validationResult.pass ? '✓ PASS' : '✗ FAIL' }}</strong>: {{ validationResult.message }}
+        </div>
+      </div>
+      
+      <div class="test-section">
+        <h2>Automated Tests</h2>
+        <button @click="runAllTests">Run All Tests</button>
+        <div v-for="(result, index) in testResults" :key="index" :class="['test-case', result.pass ? 'pass' : 'fail']">
+          <strong>{{ result.pass ? '✓ PASS' : '✗ FAIL' }}</strong>: {{ result.name }}
+          <div v-if="result.details" style="font-size: 12px; margin-top: 5px;">{{ result.details }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, reactive, ref } = Vue;
+
+    createApp({
+      setup() {
+        const formData = reactive({
+          server: '',
+          port: 8080,
+          protocol: 'http'
+        });
+
+        const errors = reactive({
+          server: '',
+          port: '',
+          general: ''
+        });
+
+        const validationResult = ref(null);
+        const testResults = ref([]);
+
+        function isValidUrl(str) {
+          const hostnamePattern = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+          const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+          const cleanStr = str.replace(/^(https?|socks5):\/\//, '');
+          return hostnamePattern.test(cleanStr) || ipPattern.test(cleanStr) || cleanStr === 'localhost';
+        }
+
+        function clearErrors() {
+          errors.server = '';
+          errors.port = '';
+          errors.general = '';
+        }
+
+        function validateForm() {
+          clearErrors();
+          let isValid = true;
+
+          if (!formData.server || formData.server.trim() === '') {
+            errors.server = '服务器地址不能为空';
+            isValid = false;
+          } else if (!isValidUrl(formData.server.trim())) {
+            errors.server = '服务器地址格式不正确，请输入有效的域名或IP地址';
+            isValid = false;
+          }
+
+          if (!Number.isInteger(formData.port) || formData.port < 1 || formData.port > 65535) {
+            errors.port = '端口号必须在 1-65535 之间';
+            isValid = false;
+          }
+
+          if (!isValid) {
+            errors.general = '请修正表单中的错误后再保存';
+          }
+
+          return isValid;
+        }
+
+        function testValidation() {
+          const isValid = validateForm();
+          validationResult.value = {
+            pass: isValid,
+            message: isValid ? 'Form is valid!' : 'Form has validation errors'
+          };
+        }
+
+        function resetForm() {
+          formData.server = '';
+          formData.port = 8080;
+          formData.protocol = 'http';
+          clearErrors();
+          validationResult.value = null;
+        }
+
+        function runTest(name, testFn) {
+          try {
+            const result = testFn();
+            testResults.value.push({
+              name,
+              pass: result.pass,
+              details: result.details
+            });
+          } catch (error) {
+            testResults.value.push({
+              name,
+              pass: false,
+              details: error.message
+            });
+          }
+        }
+
+        function runAllTests() {
+          testResults.value = [];
+
+          // Test 1: Empty server should fail
+          runTest('Empty server address should fail', () => {
+            formData.server = '';
+            formData.port = 8080;
+            const isValid = validateForm();
+            return {
+              pass: !isValid && errors.server.includes('不能为空'),
+              details: `Expected validation to fail with empty server. Got: ${errors.server}`
+            };
+          });
+
+          // Test 2: Invalid server format should fail
+          runTest('Invalid server format should fail', () => {
+            formData.server = 'invalid server!@#';
+            formData.port = 8080;
+            const isValid = validateForm();
+            return {
+              pass: !isValid && errors.server.includes('格式不正确'),
+              details: `Expected validation to fail with invalid format. Got: ${errors.server}`
+            };
+          });
+
+          // Test 3: Valid hostname should pass
+          runTest('Valid hostname should pass', () => {
+            formData.server = 'proxy.example.com';
+            formData.port = 8080;
+            const isValid = validateForm();
+            return {
+              pass: isValid && !errors.server,
+              details: `Expected validation to pass. Errors: ${errors.server}`
+            };
+          });
+
+          // Test 4: Valid IP should pass
+          runTest('Valid IP address should pass', () => {
+            formData.server = '192.168.1.1';
+            formData.port = 8080;
+            const isValid = validateForm();
+            return {
+              pass: isValid && !errors.server,
+              details: `Expected validation to pass. Errors: ${errors.server}`
+            };
+          });
+
+          // Test 5: localhost should pass
+          runTest('localhost should pass', () => {
+            formData.server = 'localhost';
+            formData.port = 8080;
+            const isValid = validateForm();
+            return {
+              pass: isValid && !errors.server,
+              details: `Expected validation to pass. Errors: ${errors.server}`
+            };
+          });
+
+          // Test 6: Port out of range should fail
+          runTest('Port > 65535 should fail', () => {
+            formData.server = 'proxy.example.com';
+            formData.port = 99999;
+            const isValid = validateForm();
+            return {
+              pass: !isValid && errors.port.includes('1-65535'),
+              details: `Expected validation to fail with port out of range. Got: ${errors.port}`
+            };
+          });
+
+          // Test 7: Port = 0 should fail
+          runTest('Port = 0 should fail', () => {
+            formData.server = 'proxy.example.com';
+            formData.port = 0;
+            const isValid = validateForm();
+            return {
+              pass: !isValid && errors.port.includes('1-65535'),
+              details: `Expected validation to fail with port = 0. Got: ${errors.port}`
+            };
+          });
+
+          // Test 8: Valid port range
+          runTest('Valid ports (1, 80, 443, 8080, 65535) should pass', () => {
+            const validPorts = [1, 80, 443, 8080, 65535];
+            formData.server = 'proxy.example.com';
+            
+            for (const port of validPorts) {
+              formData.port = port;
+              const isValid = validateForm();
+              if (!isValid || errors.port) {
+                return {
+                  pass: false,
+                  details: `Port ${port} failed validation. Error: ${errors.port}`
+                };
+              }
+            }
+            
+            return {
+              pass: true,
+              details: 'All valid ports passed'
+            };
+          });
+
+          // Test 9: Server with protocol prefix should pass
+          runTest('Server with http:// prefix should pass', () => {
+            formData.server = 'http://proxy.example.com';
+            formData.port = 8080;
+            const isValid = validateForm();
+            return {
+              pass: isValid && !errors.server,
+              details: `Expected validation to pass. Errors: ${errors.server}`
+            };
+          });
+
+          // Test 10: Multiple errors
+          runTest('Multiple validation errors should be shown', () => {
+            formData.server = '';
+            formData.port = 0;
+            const isValid = validateForm();
+            return {
+              pass: !isValid && errors.server && errors.port && errors.general,
+              details: `Expected all error fields to be populated. Server: ${errors.server}, Port: ${errors.port}, General: ${errors.general}`
+            };
+          });
+
+          resetForm();
+        }
+
+        return {
+          formData,
+          errors,
+          validationResult,
+          testResults,
+          testValidation,
+          resetForm,
+          runAllTests
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

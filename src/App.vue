@@ -1,9 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 const THEME_KEY = 'all2api-theme-mode-v1';
 const router = useRouter();
+const route = useRoute();
 const themeMode = ref('dark');
 const currentTheme = ref('dark');
 const switching = ref(false);
@@ -75,60 +76,33 @@ onMounted(() => {
 
 <template>
   <div class="relative min-h-screen overflow-hidden" :class="currentTheme === 'light' ? 'theme-light' : 'theme-dark'">
-    <div class="pointer-events-none absolute inset-0 opacity-70">
-      <div class="absolute left-[-12rem] top-[-10rem] h-80 w-80 rounded-full bg-cyan-500/15 blur-3xl" />
-      <div class="absolute right-[-8rem] top-10 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />
-      <div class="absolute bottom-[-10rem] left-1/3 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
+    <!-- Cyber grid background -->
+    <div class="pointer-events-none fixed inset-0 z-0">
+      <div class="absolute inset-0 bg-[var(--bg-void)]" />
+      <div class="absolute inset-0 opacity-30" style="background-image: linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px); background-size: 48px 48px;" />
+      <div class="absolute top-0 left-1/4 w-[600px] h-[600px] rounded-full bg-cyan-500/5 blur-[150px]" />
+      <div class="absolute bottom-0 right-1/4 w-[500px] h-[500px] rounded-full bg-purple-500/5 blur-[150px]" />
     </div>
 
-    <header class="fixed inset-x-0 top-0 z-50 border-b border-slate-700/70 bg-slate-900/65 backdrop-blur-xl">
-      <div class="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
-        <button
-          class="bg-gradient-to-r from-cyan-300 to-emerald-300 bg-clip-text text-sm font-semibold tracking-wide text-transparent transition hover:opacity-80"
-          @click="router.push('/')"
-        >
-          All2API Account Center
-        </button>
-        <div class="flex items-center gap-2">
-          <button
-            class="rounded-md border px-2 py-1 text-xs transition"
-            :class="themeMode === 'light' ? 'border-cyan-500 bg-cyan-500/15 text-cyan-200' : 'border-slate-600 bg-slate-900/45 text-slate-200 hover:border-cyan-500'"
-            title="白天模式"
-            @click="setThemeMode('light', $event)"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-            </svg>
-          </button>
-          <button
-            class="rounded-md border px-2 py-1 text-xs transition"
-            :class="themeMode === 'auto' ? 'border-cyan-500 bg-cyan-500/15 text-cyan-200' : 'border-slate-600 bg-slate-900/45 text-slate-200 hover:border-cyan-500'"
-            title="自动模式"
-            @click="setThemeMode('auto', $event)"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7v6l4 2" />
-            </svg>
-          </button>
-          <button
-            class="rounded-md border px-2 py-1 text-xs transition"
-            :class="themeMode === 'dark' ? 'border-cyan-500 bg-cyan-500/15 text-cyan-200' : 'border-slate-600 bg-slate-900/45 text-slate-200 hover:border-cyan-500'"
-            title="黑夜模式"
-            @click="setThemeMode('dark', $event)"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
-            </svg>
-          </button>
-        </div>
+    <!-- Header -->
+    <header class="fixed inset-x-0 top-0 z-50 bg-[#060810]/85 backdrop-blur-xl border-b border-cyan-500/10">
+      <div class="mx-auto flex h-14 max-w-7xl items-center px-6">
+        <span class="neon-text-mixed text-base font-bold tracking-wider cursor-pointer" @click="router.push('/')">ProxyForge</span>
       </div>
+      <!-- Scanline overlay -->
+      <div class="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
     </header>
 
-    <main class="relative mx-auto max-w-7xl px-4 pb-8 pt-24">
+    <!-- Main content -->
+    <main class="relative z-10 mx-auto max-w-7xl px-6 py-20">
       <RouterView />
     </main>
+
+    <!-- Footer -->
+    <footer class="relative z-10 mx-auto max-w-7xl px-6 pb-8 pt-16 text-center">
+      <div class="neon-divider mb-4" />
+      <p class="text-xs text-slate-600">ProxyForge · v0.1.0 · Cyber Edition</p>
+    </footer>
 
     <div
       v-if="switching"

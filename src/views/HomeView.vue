@@ -134,39 +134,43 @@ onMounted(() => {
 
 <template>
   <section class="grid gap-6">
-    <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl shadow-cyan-950/20">
-      <h1 class="text-2xl font-bold text-white">Kiro 自动注册改号</h1>
-      <p class="mt-2 text-sm text-slate-300">先配置注册页面和选择器，再批量生成新账号。请只在你有权限的网站使用。</p>
+    <!-- Header -->
+    <div class="neon-card p-6">
+      <h1 class="neon-text-cyan text-2xl font-black">kiro auto register</h1>
+      <p class="mt-2 text-sm text-slate-400">先配置注册页面和选择器，再批量生成新账号。请只在你有权限的网站使用。</p>
+    </div>
 
-      <div class="mt-6 grid gap-4 md:grid-cols-2">
-        <label class="grid gap-2 text-sm">
-          <span class="text-slate-300">注册页 URL</span>
-          <input v-model="form.url" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder="https://example.com/signup" />
+    <!-- Form Fields -->
+    <div class="neon-card p-6">
+      <div class="grid gap-5 md:grid-cols-2">
+        <label class="grid gap-1.5">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">注册页 URL</span>
+          <input v-model="form.url" class="neon-input" placeholder="https://example.com/signup" />
         </label>
 
-        <label class="grid gap-2 text-sm">
-          <span class="text-slate-300">默认密码</span>
-          <input v-model="form.password" type="password" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder="请输入统一密码" />
+        <label class="grid gap-1.5">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">默认密码</span>
+          <input v-model="form.password" type="password" class="neon-input" placeholder="请输入统一密码" />
         </label>
 
-        <label class="grid gap-2 text-sm">
-          <span class="text-slate-300">用户名前缀</span>
-          <input v-model="form.usernamePrefix" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder="demo_" />
+        <label class="grid gap-1.5">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">用户名前缀</span>
+          <input v-model="form.usernamePrefix" class="neon-input" placeholder="demo_" />
         </label>
 
-        <label class="grid gap-2 text-sm">
-          <span class="text-slate-300">邮箱域名</span>
-          <input v-model="form.emailDomain" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder="example.com" />
+        <label class="grid gap-1.5">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">邮箱域名</span>
+          <input v-model="form.emailDomain" class="neon-input" placeholder="example.com" />
         </label>
 
-        <label class="grid gap-2 text-sm">
-          <span class="text-slate-300">注册数量</span>
-          <input v-model.number="form.count" type="number" min="1" max="50" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" />
+        <label class="grid gap-1.5">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">注册数量</span>
+          <input v-model.number="form.count" type="number" min="1" max="50" class="neon-input" />
         </label>
 
-        <label class="grid gap-2 text-sm">
-          <span class="text-slate-300">指纹类型</span>
-          <select v-model="form.fingerprintType" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100">
+        <label class="grid gap-1.5">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">指纹类型</span>
+          <select v-model="form.fingerprintType" class="neon-input">
             <option value="none">none（不覆盖）</option>
             <option value="random">random（随机）</option>
             <option value="windows_chrome">windows_chrome</option>
@@ -175,107 +179,113 @@ onMounted(() => {
           </select>
         </label>
 
-        <div class="grid gap-2 text-sm pt-1">
-          <label class="flex items-center gap-2 text-slate-300"><input v-model="form.headless" type="checkbox" />无头模式</label>
-          <label class="flex items-center gap-2 text-slate-300"><input v-model="form.stopOnError" type="checkbox" />出错即停</label>
+        <div class="grid gap-2 text-sm pt-1 md:col-span-2">
+          <label class="flex items-center gap-2 text-slate-400"><input v-model="form.headless" type="checkbox" class="accent-cyan-400" />无头模式</label>
+          <label class="flex items-center gap-2 text-slate-400"><input v-model="form.stopOnError" type="checkbox" class="accent-cyan-400" />出错即停</label>
         </div>
       </div>
 
-      <div class="mt-6 rounded-xl border border-cyan-900/40 bg-slate-950/60 p-4">
-        <h2 class="text-base font-semibold text-cyan-300">Kiro 流程（Cookie 授权链路）</h2>
-        <p class="mt-1 text-xs text-slate-400">
+      <!-- Kiro Flow -->
+      <div class="mt-6 neon-card p-4">
+        <h2 class="text-base font-semibold neon-text-cyan">Kiro 流程（Cookie 授权链路）</h2>
+        <p class="mt-1 text-xs text-slate-500">
           流程参考 kiro-auto：处理 Cookie 弹窗 -> 轮询授权 Cookie -> 连续稳定后判定完成。
         </p>
         <div class="mt-3 grid gap-3 md:grid-cols-3">
-          <label class="flex items-center gap-2 text-sm text-slate-300">
-            <input v-model="form.kiroFlow.enabled" type="checkbox" />
+          <label class="flex items-center gap-2 text-sm text-slate-400">
+            <input v-model="form.kiroFlow.enabled" type="checkbox" class="accent-cyan-400" />
             启用 Kiro Cookie 流程
           </label>
-          <label class="grid gap-1 text-sm">
-            <span class="text-slate-300">Cookie 名称</span>
-            <input v-model="form.kiroFlow.cookieName" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" />
+          <label class="grid gap-1.5">
+            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Cookie 名称</span>
+            <input v-model="form.kiroFlow.cookieName" class="neon-input" />
           </label>
-          <label class="grid gap-1 text-sm">
-            <span class="text-slate-300">稳定秒数</span>
-            <input v-model.number="form.kiroFlow.stableSeconds" type="number" min="3" max="60" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" />
+          <label class="grid gap-1.5">
+            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">稳定秒数</span>
+            <input v-model.number="form.kiroFlow.stableSeconds" type="number" min="3" max="60" class="neon-input" />
           </label>
-          <label class="grid gap-1 text-sm md:col-span-1">
-            <span class="text-slate-300">最大等待秒数</span>
-            <input v-model.number="form.kiroFlow.maxWaitSeconds" type="number" min="10" max="300" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" />
+          <label class="grid gap-1.5 md:col-span-1">
+            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">最大等待秒数</span>
+            <input v-model.number="form.kiroFlow.maxWaitSeconds" type="number" min="10" max="300" class="neon-input" />
           </label>
         </div>
       </div>
 
+      <!-- Selectors -->
       <div class="mt-6">
-        <h2 class="text-base font-semibold text-cyan-300">选择器配置</h2>
+        <h2 class="text-base font-semibold neon-text-cyan">选择器配置</h2>
         <div class="mt-3 grid gap-4 md:grid-cols-2">
-          <label class="grid gap-2 text-sm"><span class="text-slate-300">用户名输入框</span><input v-model="form.selectors.username" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder="#username" /></label>
-          <label class="grid gap-2 text-sm"><span class="text-slate-300">邮箱输入框</span><input v-model="form.selectors.email" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder="#email" /></label>
-          <label class="grid gap-2 text-sm"><span class="text-slate-300">密码输入框</span><input v-model="form.selectors.password" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder="#password" /></label>
-          <label class="grid gap-2 text-sm"><span class="text-slate-300">确认密码输入框</span><input v-model="form.selectors.confirmPassword" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder="#confirm-password" /></label>
-          <label class="grid gap-2 text-sm"><span class="text-slate-300">提交按钮</span><input v-model="form.selectors.submit" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder="button[type='submit']" /></label>
-          <label class="grid gap-2 text-sm"><span class="text-slate-300">成功标记（可选）</span><input v-model="form.selectors.success" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder=".signup-success" /></label>
+          <label class="grid gap-1.5"><span class="text-xs font-medium text-slate-400 uppercase tracking-wider">用户名输入框</span><input v-model="form.selectors.username" class="neon-input" placeholder="#username" /></label>
+          <label class="grid gap-1.5"><span class="text-xs font-medium text-slate-400 uppercase tracking-wider">邮箱输入框</span><input v-model="form.selectors.email" class="neon-input" placeholder="#email" /></label>
+          <label class="grid gap-1.5"><span class="text-xs font-medium text-slate-400 uppercase tracking-wider">密码输入框</span><input v-model="form.selectors.password" class="neon-input" placeholder="#password" /></label>
+          <label class="grid gap-1.5"><span class="text-xs font-medium text-slate-400 uppercase tracking-wider">确认密码输入框</span><input v-model="form.selectors.confirmPassword" class="neon-input" placeholder="#confirm-password" /></label>
+          <label class="grid gap-1.5"><span class="text-xs font-medium text-slate-400 uppercase tracking-wider">提交按钮</span><input v-model="form.selectors.submit" class="neon-input" placeholder="button[type='submit']" /></label>
+          <label class="grid gap-1.5"><span class="text-xs font-medium text-slate-400 uppercase tracking-wider">成功标记（可选）</span><input v-model="form.selectors.success" class="neon-input" placeholder=".signup-success" /></label>
         </div>
       </div>
 
+      <!-- Run Button -->
       <div class="mt-6 flex items-center gap-3">
-        <button class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-600" :disabled="running" @click="runTask">
-          {{ running ? '执行中...' : '开始自动注册' }}
+        <button :disabled="running" @click="runTask" class="neon-btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+          {{ running ? 'Running...' : 'Start Registration' }}
         </button>
         <p v-if="errorText" class="text-sm text-rose-300">{{ errorText }}</p>
       </div>
     </div>
 
-    <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-      <h2 class="text-base font-semibold text-cyan-300">邮箱接码工具（提取自 kiro-auto）</h2>
+    <!-- Mailbox Tool -->
+    <div class="neon-card p-6">
+      <h2 class="text-base font-semibold neon-text-cyan">邮箱接码工具（提取自 kiro-auto）</h2>
       <div class="mt-3 grid gap-4 md:grid-cols-2">
-        <label class="grid gap-2 text-sm">
-          <span class="text-slate-300">邮箱服务</span>
-          <select v-model="mailbox.providerId" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100">
+        <label class="grid gap-1.5">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">邮箱服务</span>
+          <select v-model="mailbox.providerId" class="neon-input">
             <option v-for="p in providerList" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
         </label>
         <div class="flex items-end gap-2">
-          <button class="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-600" :disabled="mailbox.loadingProviders" @click="loadProviders">
+          <button :disabled="mailbox.loadingProviders" @click="loadProviders" class="neon-btn disabled:opacity-40 disabled:cursor-not-allowed">
             刷新服务
           </button>
-          <button class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-600" :disabled="mailbox.creating" @click="createMailbox">
+          <button :disabled="mailbox.creating" @click="createMailbox" class="neon-btn disabled:opacity-40 disabled:cursor-not-allowed">
             {{ mailbox.creating ? '创建中...' : '创建邮箱' }}
           </button>
         </div>
 
-        <label class="grid gap-2 text-sm"><span class="text-slate-300">邮箱地址</span><input v-model="mailbox.email" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder="创建后自动填充" /></label>
-        <label class="grid gap-2 text-sm"><span class="text-slate-300">令牌 token</span><input v-model="mailbox.token" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" placeholder="创建后自动填充" /></label>
+        <label class="grid gap-1.5"><span class="text-xs font-medium text-slate-400 uppercase tracking-wider">邮箱地址</span><input v-model="mailbox.email" class="neon-input" placeholder="创建后自动填充" /></label>
+        <label class="grid gap-1.5"><span class="text-xs font-medium text-slate-400 uppercase tracking-wider">令牌 token</span><input v-model="mailbox.token" class="neon-input" placeholder="创建后自动填充" /></label>
 
-        <label class="grid gap-2 text-sm"><span class="text-slate-300">超时（秒）</span><input v-model.number="mailbox.timeoutSec" type="number" min="10" max="600" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" /></label>
-        <label class="grid gap-2 text-sm"><span class="text-slate-300">轮询间隔（毫秒）</span><input v-model.number="mailbox.intervalMs" type="number" min="2000" max="10000" step="500" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" /></label>
+        <label class="grid gap-1.5"><span class="text-xs font-medium text-slate-400 uppercase tracking-wider">超时（秒）</span><input v-model.number="mailbox.timeoutSec" type="number" min="10" max="600" class="neon-input" /></label>
+        <label class="grid gap-1.5"><span class="text-xs font-medium text-slate-400 uppercase tracking-wider">轮询间隔（毫秒）</span><input v-model.number="mailbox.intervalMs" type="number" min="2000" max="10000" step="500" class="neon-input" /></label>
       </div>
 
       <div class="mt-4 flex items-center gap-3">
-        <button class="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-600" :disabled="mailbox.waiting" @click="waitCode">
+        <button :disabled="mailbox.waiting" @click="waitCode" class="neon-btn disabled:opacity-40 disabled:cursor-not-allowed">
           {{ mailbox.waiting ? '等待中...' : '开始接码' }}
         </button>
         <p v-if="mailbox.code" class="text-sm text-emerald-300">验证码: {{ mailbox.code }}</p>
       </div>
 
-      <p v-if="mailbox.message" class="mt-2 text-sm text-slate-300">{{ mailbox.message }}</p>
+      <p v-if="mailbox.message" class="mt-2 text-sm text-slate-400">{{ mailbox.message }}</p>
       <p v-if="mailbox.error" class="mt-2 text-sm text-rose-300">{{ mailbox.error }}</p>
     </div>
 
-    <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-      <h2 class="text-base font-semibold text-cyan-300">执行日志</h2>
-      <div class="mt-3 max-h-56 overflow-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-300">
+    <!-- Logs -->
+    <div class="neon-card p-6">
+      <h2 class="text-base font-semibold neon-text-cyan">执行日志</h2>
+      <div class="mt-3 max-h-56 overflow-auto rounded-lg bg-[#05070a]/60 border border-slate-800/60 p-3 text-xs text-slate-400">
         <p v-if="logs.length === 0">暂无日志</p>
         <p v-for="(line, idx) in logs" :key="idx">{{ line }}</p>
       </div>
     </div>
 
-    <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-      <h2 class="text-base font-semibold text-cyan-300">结果列表</h2>
-      <div class="mt-3 overflow-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-300">
+    <!-- Results -->
+    <div class="neon-card p-6">
+      <h2 class="text-base font-semibold neon-text-cyan">结果列表</h2>
+      <div class="mt-3 overflow-auto rounded-lg bg-[#05070a]/60 border border-slate-800/60 p-3 text-xs text-slate-400">
         <table class="w-full table-auto text-left">
           <thead>
-            <tr class="text-slate-400">
+            <tr class="text-slate-500">
               <th class="px-2 py-1">序号</th>
               <th class="px-2 py-1">账号</th>
               <th class="px-2 py-1">邮箱</th>
@@ -285,7 +295,7 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in results" :key="item.index" class="border-t border-slate-800">
+            <tr v-for="item in results" :key="item.index" class="border-t border-slate-800/60">
               <td class="px-2 py-1">{{ item.index }}</td>
               <td class="px-2 py-1">{{ item.account.username }}</td>
               <td class="px-2 py-1">{{ item.account.email }}</td>
