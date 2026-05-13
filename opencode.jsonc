@@ -1,0 +1,119 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode-go": {
+      "name": "OpenCode Go",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://opencode.ai/zen/go/v1"
+      },
+      "models": {
+        "deepseek-v4-flash": {
+          "name": "DeepSeek V4 Flash",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "glm-5": {
+          "name": "GLM-5",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "glm-5.1": {
+          "name": "GLM-5.1",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "kimi-k2.5": {
+          "name": "Kimi K2.5",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "kimi-k2.6": {
+          "name": "Kimi K2.6",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "minimax-m2.5": {
+          "name": "MiniMax M2.5",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "minimax-m2.7": {
+          "name": "MiniMax M2.7",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "qwen3.5-plus": {
+          "name": "Qwen3.5 Plus",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "qwen3.6-plus": {
+          "name": "Qwen3.6 Plus",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "mimo-v2.5": {
+          "name": "MiMo V2.5",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "mimo-v2.5-pro": {
+          "name": "MiMo V2.5 Pro",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "mimo-v2-pro": {
+          "name": "MiMo V2 Pro",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "mimo-v2-omni": {
+          "name": "MiMo V2 Omni",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "hy3-preview": {
+          "name": "HY3 Preview",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        }
+      }
+    }
+  }
+}

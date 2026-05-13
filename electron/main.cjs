@@ -5,6 +5,9 @@ const fs = require('fs/promises');
 const { FingerprintGenerator } = require('./fingerprint/generator.cjs');
 const { FingerprintInjector } = require('./fingerprint/injector.cjs');
 const { ConsistencyValidator } = require('./fingerprint/validator.cjs');
+const { startServer: startProxyServer, stopServer: stopProxyServer, getStatus: getProxyStatus } = require('./proxy-server.cjs');
+const { shutdown: shutdownProxySessions } = require('./proxy-session.cjs');
+const { setProfilePathResolver } = require('./proxy-shared.cjs');
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 const fingerprintGenerator = new FingerprintGenerator();
@@ -322,20 +325,18 @@ async function launchKiroClient(payload) {
   }
 
   return new Promise((resolve, reject) => {
+    // 移除 detached: true，保留父子进程连接以支持单实例检测
     const child = spawn(executablePath, args, {
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'ignore', 'ignore'],
+      windowsHide: true
     });
 
     let settled = false;
-    let errorOutput = '';
 
-    child.stderr?.on('data', (data) => {
-      errorOutput += data.toString();
-    });
-
-    // 等待进程启动成功（进程存在超过 1 秒视为启动成功）
-    const startupTimer = setTimeout(() => {
+    // 立即返回，让 Kiro 自行处理单实例逻辑
+    // 如果已存在实例，Kiro 会聚焦现有窗口；否则打开新窗口
+    // 会话数据由 --user-data-dir 保证持久化
+    setTimeout(() => {
       if (!settled) {
         settled = true;
         child.unref();
@@ -348,24 +349,20 @@ async function launchKiroClient(payload) {
           proxyApplied: !!(proxyConfig && proxyConfig.enabled)
         });
       }
-    }, 1000);
+    }, 500);
 
     child.on('error', (err) => {
       if (!settled) {
         settled = true;
-        clearTimeout(startupTimer);
         reject(new Error(`启动 Kiro 失败: ${err.message}`));
       }
     });
 
-    child.on('exit', (code, signal) => {
+    child.on('exit', (code) => {
       if (!settled) {
         settled = true;
-        clearTimeout(startupTimer);
-        if (code !== 0 && code !== null) {
-          reject(new Error(`Kiro 进程退出，代码: ${code}${errorOutput ? `，错误: ${errorOutput}` : ''}`));
-        } else {
-          // 进程立即退出但没有错误码，可能是单实例限制
+        // 立即退出通常意味着单实例检测生效（已有实例在运行）
+        if (code === 0 || code === null) {
           resolve({
             ok: true,
             executablePath,
@@ -373,8 +370,10 @@ async function launchKiroClient(payload) {
             pid: child.pid,
             launchedAt: new Date().toISOString(),
             proxyApplied: !!(proxyConfig && proxyConfig.enabled),
-            note: '进程已退出，可能已有实例在运行'
+            reusedExisting: true
           });
+        } else {
+          reject(new Error(`Kiro 进程退出，代码: ${code}`));
         }
       }
     });
@@ -2178,11 +2177,115 @@ app.whenReady().then(() => {
     }
   });
 
+  // ─── API Reverse Proxy IPC Handlers ───
+
+  ipcMain.handle('proxy:getStatus', async () => {
+    try {
+      const status = getProxyStatus ? getProxyStatus() : { running: false };
+      return { ok: true, data: status };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('proxy:getConfig', async () => {
+    try {
+      const proxyPort = parseInt(process.env.PROXY_PORT || '11434', 10);
+      return { ok: true, data: { host: '127.0.0.1', port: proxyPort } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // 缓存 providers 数据（由前端通过 proxy:setProviders 传入）
+  let cachedProviders = [];
+
+  ipcMain.handle('proxy:getAccounts', async () => {
+    try {
+      const accounts = await readStoredAccounts();
+      const validAccounts = accounts.filter(a =>
+        a.availableModels && a.availableModels.length > 0
+      );
+      // 同步到 proxy-server
+      try {
+        const proxyServer = require('./proxy-server.cjs');
+        proxyServer.setAccounts({ accounts: validAccounts, providers: cachedProviders });
+      } catch (_e) {}
+      return { ok: true, data: { accounts: validAccounts, providers: cachedProviders } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('proxy:setProviders', async (_event, providers) => {
+    try {
+      cachedProviders = Array.isArray(providers) ? providers : [];
+      // 同步到 proxy-server
+      try {
+        const proxyServer = require('./proxy-server.cjs');
+        const accounts = await readStoredAccounts();
+        const validAccounts = accounts.filter(a =>
+          a.availableModels && a.availableModels.length > 0
+        );
+        proxyServer.setAccounts({ accounts: validAccounts, providers: cachedProviders });
+      } catch (_e) {}
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('proxy:start', async () => {
+    try {
+      const proxyPort = parseInt(process.env.PROXY_PORT || '11434', 10);
+      setProfilePathResolver((accountId) => kiroWebProfilePath(accountId));
+      await startProxyServer({ port: proxyPort });
+      console.log(`[main] API reverse proxy server started on http://127.0.0.1:${proxyPort}`);
+      return { ok: true };
+    } catch (err) {
+      console.error('[main] Failed to start proxy server:', err.message);
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('proxy:stop', async () => {
+    try {
+      await stopProxyServer();
+      console.log('[main] Proxy server stopped');
+      return { ok: true };
+    } catch (err) {
+      console.error('[main] Error stopping proxy server:', err.message);
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('proxy:updateConfig', async (_event, cfg) => {
+    try {
+      if (cfg && typeof cfg.port === 'number') {
+        process.env.PROXY_PORT = String(cfg.port);
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('before-quit', async () => {
+  // Shutdown proxy server gracefully
+  try {
+    await shutdownProxySessions();
+    await stopProxyServer();
+    console.log('[main] Proxy server stopped');
+  } catch (err) {
+    console.error('[main] Error stopping proxy server:', err.message);
+  }
 });
 
 app.on('window-all-closed', () => {

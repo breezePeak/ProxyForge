@@ -21,5 +21,14 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   quota: {
     getQuota: (params) => ipcRenderer.invoke('quota:getQuota', params)
+  },
+  proxy: {
+    getStatus: () => ipcRenderer.invoke('proxy:getStatus'),
+    getConfig: () => ipcRenderer.invoke('proxy:getConfig'),
+    getAccounts: () => ipcRenderer.invoke('proxy:getAccounts'),
+    setProviders: (providers) => ipcRenderer.invoke('proxy:setProviders', providers),
+    start: () => ipcRenderer.invoke('proxy:start'),
+    stop: () => ipcRenderer.invoke('proxy:stop'),
+    updateConfig: (cfg) => ipcRenderer.invoke('proxy:updateConfig', cfg)
   }
 });

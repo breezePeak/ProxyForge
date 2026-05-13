@@ -9,10 +9,17 @@ const route = useRoute();
 const router = useRouter();
 const center = useAccountCenterStore();
 
-const providerId = computed(() => String(route.params.id || ''));
+// 池类型 tab
+const poolTabs = computed(() => center.providers);
+const activePoolTab = ref('kiro'); // 默认选中 Kiro
+const providerId = computed(() => activePoolTab.value);
 const provider = computed(() => center.providerById(providerId.value));
 const accountList = computed(() => center.accountsByProvider[providerId.value] || []);
 const stats = computed(() => center.providerStats(providerId.value));
+
+function switchPoolTab(id) {
+  activePoolTab.value = id;
+}
 
 // 性能优化：检查是否需要虚拟滚动（账号数量 > 100）
 const shouldUseVirtualScroll = computed(() => accountList.value.length > 100);
@@ -225,6 +232,15 @@ function handleProxySave(config) {
     runState.error = error instanceof Error ? error.message : String(error);
     pushLog(`❌ 保存反代配置失败: ${runState.error}`);
   }
+}
+
+// 切换账号 API 反代禁用状态
+function toggleApiProxy(account) {
+  const disabled = account.apiProxyDisabled === true;
+  center.updateAccount(providerId.value, account.id, {
+    apiProxyDisabled: !disabled
+  });
+  pushLog(`${!disabled ? '❌ 已禁用' : '✅ 已启用'}账号反代: ${account.email || account.username}`);
 }
 
 // 额度细化显示（使用缓存优化）
@@ -595,14 +611,30 @@ async function launchSelectedKiroClient(mode) {
 
 <template>
   <section class="grid gap-4">
-    <div class="neon-card flex items-center justify-between p-4">
-      <div>
-        <h1 class="neon-text-cyan text-2xl font-bold">{{ provider?.name }}</h1>
-        <p class="mt-1 text-sm text-slate-300">{{ provider?.intro }}</p>
+    <!-- Header -->
+    <div class="neon-card p-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="neon-text-cyan text-2xl font-bold">池管理</h1>
+          <p class="mt-1 text-sm text-slate-300">管理不同类型 AI 工具的账号池</p>
+        </div>
       </div>
-      <button class="neon-btn" @click="router.push('/')">
-        返回主界面
-      </button>
+
+      <!-- Pool Tabs -->
+      <div class="mt-4 flex gap-2 border-b border-slate-700/50 pb-3">
+        <button
+          v-for="tab in poolTabs"
+          :key="tab.id"
+          @click="switchPoolTab(tab.id)"
+          class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          :class="activePoolTab === tab.id
+            ? 'bg-cyan-500/20 text-cyan-300'
+            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'"
+        >
+          {{ tab.name.replace(/账号/g, '池') }}
+          <span class="ml-1.5 text-xs opacity-60">({{ (center.accountsByProvider[tab.id] || []).length }})</span>
+        </button>
+      </div>
     </div>
 
     <div v-if="viewMode === 'list'" class="grid gap-4">
@@ -686,15 +718,17 @@ async function launchSelectedKiroClient(mode) {
                 {{ isActiveAccount(item) ? '重启' : '切换' }}
               </button>
               <button
-                @click.stop="openProxyConfig(item)"
-                class="neon-btn px-2.5 py-1.5 text-xs"
-                :class="item.proxyConfig?.enabled ? 'neon-badge-success' : ''"
-                title="配置反代"
+                @click.stop="toggleApiProxy(item)"
+                class="px-2.5 py-1.5 text-xs rounded transition-colors"
+                :class="item.apiProxyDisabled === true
+                  ? 'bg-red-400/20 text-red-300 hover:bg-red-400/30'
+                  : 'bg-emerald-400/20 text-emerald-300 hover:bg-emerald-400/30'"
+                :title="item.apiProxyDisabled === true ? '点击启用反代' : '点击禁用反代'"
               >
                 <svg class="mr-1 inline-block h-3.5 w-3.5 align-[-2px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                 </svg>
-                反代
+                {{ item.apiProxyDisabled === true ? '已禁用' : '禁用反代' }}
               </button>
             </div>
 

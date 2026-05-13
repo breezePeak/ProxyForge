@@ -13,19 +13,22 @@ function createDefaults() {
         id: 'kiro',
         name: 'Kiro 账号',
         intro: 'AWS Builder ID / Kiro 相关注册与切换链路',
-        maxManage: 300
+        maxManage: 300,
+        proxyEnabled: true
       },
       {
         id: 'codex',
         name: 'Codex 账号',
         intro: '通用 AI 工具账号管理占位',
-        maxManage: 200
+        maxManage: 200,
+        proxyEnabled: true
       },
       {
         id: 'cursor',
         name: 'Cursor 账号',
         intro: 'Cursor 类账号流程占位',
-        maxManage: 200
+        maxManage: 200,
+        proxyEnabled: true
       }
     ],
     accountsByProvider: {
@@ -315,6 +318,13 @@ export const useAccountCenterStore = defineStore('account-center', {
           delete this.quotaCache[key];
         }
       });
+    },
+    // 切换 provider 的 API 反代开关
+    toggleProviderProxy(providerId) {
+      const provider = this.providers.find((p) => p.id === providerId);
+      if (!provider) return;
+      provider.proxyEnabled = !provider.proxyEnabled;
+      this.persist();
     },
     // 刷新账号额度信息
     async refreshQuota(providerId, accountId) {
